@@ -1,0 +1,8 @@
+{
+  "method": "$/alive/loadFile",
+  "params": {
+    "path": "msgs/alive/simple.lisp",
+    "showStdout": true,
+    "showStderr": true
+  }
+}

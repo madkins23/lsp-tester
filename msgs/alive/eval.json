@@ -2,7 +2,6 @@
   "method": "$/alive/eval",
   "params": {
     "text": "(+ 2 (/ 15 5))",
-    "text": "(+ 2 (/ 15 5))",
     "package": "cl-user",
     "storeResult": true
   }
