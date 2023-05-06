@@ -15,11 +15,14 @@ const (
 )
 
 func main() {
+	var ()
+
 	var (
 		hostAddress string
 		clientPort  uint
 		serverPort  uint
 		requestPath string
+		expandJSON  bool
 	)
 
 	flags := flag.NewFlagSet("LSP", flag.ContinueOnError)
@@ -27,6 +30,7 @@ func main() {
 	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
 	flags.UintVar(&clientPort, "clientPort", 0, "Client port number")
 	flags.UintVar(&serverPort, "serverPort", 0, "Server port number")
+	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log if true")
 
 	logConfig := log.ConsoleOrFile{}
 	logConfig.AddFlagsToSet(flags, "/tmp/LSP.log")
@@ -44,6 +48,15 @@ func main() {
 		return
 	}
 	defer logConfig.CloseForDefer()
+
+	if expandJSON {
+		if writer := logConfig.Writer(); writer != nil {
+			fixed := *writer
+			fixed.FieldsExclude = []string{"msg"}
+			fixed.FormatExtra = extraJson
+			log.SetLogger(log.Logger().Output(fixed))
+		}
+	}
 
 	log.Info().Msg("LSP starting")
 	defer log.Info().Msg("LSP finished")

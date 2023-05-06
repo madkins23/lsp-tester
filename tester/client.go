@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,12 +19,12 @@ import (
 )
 
 const (
-	ID_RANGE = 1000
-	MESSAGE  = "Content-Length: %d\r\n\r\n%s\r\n"
+	idRange   = 1000
+	msgHdrFmt = "Content-Length: %d\r\n\r\n%s\r\n"
 )
 
 func client(host string, port uint, rqstPath string) error {
-	log.Info().Msg("LSP client starting.")
+	log.Info().Msg("LSP client starting")
 	defer log.Info().Msg("LSP client finished")
 
 	tcpAddress := host + ":" + strconv.Itoa(int(port))
@@ -41,7 +42,7 @@ func client(host string, port uint, rqstPath string) error {
 		}()
 	}
 
-	go receiver(connection)
+	go receiver("client", connection)
 
 	var err error
 	var content []byte
@@ -54,7 +55,7 @@ func client(host string, port uint, rqstPath string) error {
 	}
 
 	request.JSONRPC = JSON_RPC
-	request.ID = rand.Intn(ID_RANGE)
+	request.ID = rand.Intn(idRange)
 
 	if params, ok := request.Params.(map[string]interface{}); ok {
 		if path, found := params["path"]; found {
@@ -71,7 +72,7 @@ func client(host string, port uint, rqstPath string) error {
 	}
 
 	log.Debug().RawJSON("msg", content).Msg("Send")
-	message := fmt.Sprintf(MESSAGE, len(content), string(content))
+	message := fmt.Sprintf(msgHdrFmt, len(content), string(content))
 	if _, err = connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)
 	}
@@ -81,50 +82,70 @@ func client(host string, port uint, rqstPath string) error {
 	return nil
 }
 
-func receiver(connection *net.TCPConn) {
+func extraJson(m map[string]interface{}, buffer *bytes.Buffer) error {
+	if msg, found := m["msg"]; found {
+		//if msgBytes, ok := msg.([]byte); ok {
+		//	data := make(map[string]interface{})
+		//if err := json.Unmarshal(msgBytes, &data); err != nil {
+		//	return fmt.Errorf("unmarshal msg JSON: %w", err)
+		//} else
+		if pretty, err := json.MarshalIndent(msg, "", "  "); err != nil {
+			return fmt.Errorf("marshal msg JSON: %w", err)
+		} else {
+			buffer.WriteString("\n")
+			buffer.Write(pretty)
+		}
+		//}
+	}
+
+	return nil
+}
+
+func receiver(name string, connection *net.TCPConn) {
+	rcvrLog := log.Logger().With().Str("who", name).Logger()
 	reader := bufio.NewReader(connection)
 
 	for {
 		var contentLen = 0
 		for {
-			bytes, isPrefix, err := reader.ReadLine()
+			lineBytes, isPrefix, err := reader.ReadLine()
 			if err != nil {
-				log.Error().Err(err).Msg("Read first line")
+				rcvrLog.Error().Err(err).Msg("Read first line")
 				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
 					return
 				}
 				continue
 			} else if isPrefix {
-				log.Error().Err(err).Msg("Only beginning of header line read")
+				rcvrLog.Error().Err(err).Msg("Only beginning of header line read")
 				continue
 			}
-			if len(bytes) == 0 {
+			if len(lineBytes) == 0 {
 				break
 			}
 			re := regexp.MustCompile(`Content-Length:\s*(\d+)`)
-			matches := re.FindStringSubmatch(string(bytes))
+			matches := re.FindStringSubmatch(string(lineBytes))
 			if len(matches) < 2 {
 				continue
 			}
 			contentLen, err = strconv.Atoi(matches[1])
 			if err != nil {
-				log.Error().Err(err).Msgf("Content length '%s' not integer", matches[0])
+				rcvrLog.Error().Err(err).Msgf("Content length '%s' not integer", matches[0])
 				continue
 			}
 		}
 		if contentLen == 0 {
-			log.Error().Msg("header had no content length")
+			rcvrLog.Error().Msg("header had no content length")
 			continue
 		}
 
 		reply := make([]byte, 65536)
 
 		if length, err := reader.Read(reply[:contentLen]); err != nil {
-			log.Error().Err(err).Msg("Read response")
+			rcvrLog.Error().Err(err).Msg("Read response")
 		} else if length != contentLen {
-			log.Error().Msgf("read %d bytes instead of %d", length, contentLen)
+			rcvrLog.Error().Msgf("read %d bytes instead of %d", length, contentLen)
 		} else {
-			log.Debug().RawJSON("msg", reply[:contentLen]).Msg("Received")
+			rcvrLog.Debug().RawJSON("msg", reply[:contentLen]).Msg("Received")
 		}
 	}
 }
