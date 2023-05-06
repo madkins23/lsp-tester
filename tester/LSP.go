@@ -37,7 +37,7 @@ func main() {
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
-			fmt.Printf("ResponseError parsing command line flags: %s.", err)
+			fmt.Printf("responseError parsing command line flags: %s.", err)
 			flags.Usage()
 		}
 		return
@@ -53,7 +53,7 @@ func main() {
 		if writer := logConfig.Writer(); writer != nil {
 			fixed := *writer
 			fixed.FieldsExclude = []string{"msg"}
-			fixed.FormatExtra = extraJson
+			fixed.FormatExtra = formatMessageJSON
 			log.SetLogger(log.Logger().Output(fixed))
 		}
 	}
@@ -62,11 +62,17 @@ func main() {
 	defer log.Info().Msg("LSP finished")
 
 	if clientPort > 0 {
-		go func() {
-			if err := client(hostAddress, clientPort, requestPath); err != nil {
-				log.Error().Err(err).Msg("ResponseError in client.")
+		if connection, err := connectToLSP(hostAddress, clientPort); err != nil {
+			log.Error().Err(err).Msgf("Connect to LSP at %s:%d", hostAddress, clientPort)
+		} else {
+			go receiver("client", connection)
+
+			if requestPath != "" {
+				if err := sendMessage(connection, requestPath); err != nil {
+					log.Error().Err(err).Msgf("Send message from file %s", requestPath)
+				}
 			}
-		}()
+		}
 	}
 
 	time.Sleep(time.Hour)
