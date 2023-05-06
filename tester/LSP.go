@@ -11,6 +11,10 @@ import (
 )
 
 const (
+	// These are keys for logging, they start with funny characters to keep them
+	// at the beginning of the log lines because the zerolog.Console mechanism
+	// sorts them alphabetically by key and there's no override.
+	sizeOf  = "#size"
 	whom    = "&test"
 	whoFrom = "!from"
 	whoTo   = "!to"

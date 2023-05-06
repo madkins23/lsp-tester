@@ -46,7 +46,7 @@ func newReceiver(name, partner string, connection net.Conn) *receiver {
 }
 
 func (r *receiver) receive() {
-	content := make([]byte, 65536)
+	content := make([]byte, 1048576) // 1 Mb
 	reader := bufio.NewReader(r.conn)
 
 	for {
@@ -87,9 +87,10 @@ func (r *receiver) receive() {
 		} else if length != contentLen {
 			r.rcvLog.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
-			r.rcvLog.Debug().Str(whoFrom, r.partner).Str(whoTo, "tester").RawJSON("msg", content[:contentLen]).Msg("Received")
+			r.rcvLog.Debug().
+				Str(whoFrom, r.partner).Str(whoTo, "tester").Int(sizeOf, contentLen).
+				RawJSON("msg", content[:contentLen]).Msg("Received")
 			if r.other != nil {
-				log.Debug().Str(whoTo, r.partner).RawJSON("msg", content[:contentLen]).Msg("Send")
 				if err := r.other.sendContent(content[:contentLen]); err != nil {
 					r.rcvLog.Error().Err(err).Msg("Sending outgoing message")
 				}

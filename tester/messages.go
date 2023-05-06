@@ -51,7 +51,7 @@ func formatMessageJSON(m map[string]interface{}, buffer *bytes.Buffer) error {
 
 const (
 	idRandomRange   = 1000
-	msgHeaderFormat = "Content-Length: %d\r\n\r\n%s\r\n"
+	msgHeaderFormat = "Content-Length: %d\r\n\r\n%s"
 	jsonRpcVersion  = "2.0"
 )
 
@@ -91,7 +91,9 @@ func sendRequest(who, to string, rqst *request, connection net.Conn, logger *zer
 }
 
 func sendContent(to string, content []byte, connection net.Conn, logger *zerolog.Logger) error {
-	logger.Debug().Str(whoFrom, "tester").Str(whoTo, to).RawJSON("msg", content).Msg("Send")
+	logger.Debug().
+		Str(whoFrom, "tester").Str(whoTo, to).Int(sizeOf, len(content)).
+		RawJSON("msg", content).Msg("Send")
 	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
 	if _, err := connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)
