@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"os"
@@ -89,7 +90,7 @@ func receiver(connection *net.TCPConn) {
 			bytes, isPrefix, err := reader.ReadLine()
 			if err != nil {
 				log.Error().Err(err).Msg("Read first line")
-				if errors.Is(err, net.ErrClosed) {
+				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
 					return
 				}
 				continue
