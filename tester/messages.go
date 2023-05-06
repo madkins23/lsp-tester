@@ -54,7 +54,8 @@ const (
 	msgHdrFmt = "Content-Length: %d\r\n\r\n%s\r\n"
 )
 
-func sendMessage(connection *net.TCPConn, rqstPath string) error {
+func sendMessage(name string, connection *net.TCPConn, rqstPath string) error {
+	sendLog := log.Logger().With().Str("who", name).Logger()
 	var err error
 	var content []byte
 	request := &request{}
@@ -82,7 +83,7 @@ func sendMessage(connection *net.TCPConn, rqstPath string) error {
 		return fmt.Errorf("marshal request: %w", err)
 	}
 
-	log.Debug().RawJSON("msg", content).Msg("Send")
+	sendLog.Debug().RawJSON("msg", content).Msg("Send")
 	message := fmt.Sprintf(msgHdrFmt, len(content), string(content))
 	if _, err = connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)

@@ -68,7 +68,7 @@ func main() {
 			go receiver("client", connection)
 
 			if requestPath != "" {
-				if err := sendMessage(connection, requestPath); err != nil {
+				if err := sendMessage("client", connection, requestPath); err != nil {
 					log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 				}
 			}
