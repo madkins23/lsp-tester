@@ -50,26 +50,29 @@ func formatMessageJSON(m map[string]interface{}, buffer *bytes.Buffer) error {
 }
 
 const (
-	idRange   = 1000
-	msgHdrFmt = "Content-Length: %d\r\n\r\n%s\r\n"
+	idRandomRange   = 1000
+	msgHeaderFormat = "Content-Length: %d\r\n\r\n%s\r\n"
+	jsonRpcVersion  = "2.0"
 )
 
-func sendMessage(name string, connection *net.TCPConn, rqstPath string) error {
-	sendLog := log.Logger().With().Str("who", name).Logger()
+func loadRequest(requestPath string) (*request, error) {
 	var err error
 	var content []byte
-	request := &request{}
-	if content, err = os.ReadFile(rqstPath); err != nil {
-		return fmt.Errorf("read request %s: %w", rqstPath, err)
+	rqst := &request{}
+	if content, err = os.ReadFile(requestPath); err != nil {
+		return nil, fmt.Errorf("read request %s: %w", requestPath, err)
 	}
-	if err = json.Unmarshal(content, request); err != nil {
-		return fmt.Errorf("unmarshal request: %w", err)
+	if err = json.Unmarshal(content, rqst); err != nil {
+		return nil, fmt.Errorf("unmarshal request: %w", err)
 	}
+	return rqst, nil
+}
 
-	request.JSONRPC = JSON_RPC
-	request.ID = rand.Intn(idRange)
+func sendRequest(from string, rqst *request, connection *net.TCPConn) error {
+	rqst.JSONRPC = jsonRpcVersion
+	rqst.ID = rand.Intn(idRandomRange)
 
-	if params, ok := request.Params.(map[string]interface{}); ok {
+	if params, ok := rqst.Params.(map[string]interface{}); ok {
 		if path, found := params["path"]; found {
 			if relPath, ok := path.(string); ok {
 				if absPath, err := filepath.Abs(relPath); err == nil {
@@ -79,13 +82,18 @@ func sendMessage(name string, connection *net.TCPConn, rqstPath string) error {
 		}
 	}
 
-	if content, err = json.Marshal(request); err != nil {
+	if content, err := json.Marshal(rqst); err != nil {
 		return fmt.Errorf("marshal request: %w", err)
+	} else if err := sendContent(from, content, connection); err != nil {
+		return fmt.Errorf("send content: %w", err)
 	}
+	return nil
+}
 
-	sendLog.Debug().RawJSON("msg", content).Msg("Send")
-	message := fmt.Sprintf(msgHdrFmt, len(content), string(content))
-	if _, err = connection.Write([]byte(message)); err != nil {
+func sendContent(from string, content []byte, connection *net.TCPConn) error {
+	log.Debug().Str(whom, from).RawJSON("msg", content).Msg("Send")
+	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
+	if _, err := connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)
 	}
 

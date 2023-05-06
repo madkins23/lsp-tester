@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	JSON_RPC = "2.0"
+	whom = "who"
 )
 
 func main() {
@@ -61,14 +61,19 @@ func main() {
 	log.Info().Msg("LSP starting")
 	defer log.Info().Msg("LSP finished")
 
+	var client *receiver
+
 	if clientPort > 0 {
 		if connection, err := connectToLSP(hostAddress, clientPort); err != nil {
 			log.Error().Err(err).Msgf("Connect to LSP at %s:%d", hostAddress, clientPort)
 		} else {
-			go receiver("client", connection)
+			client = newReceiver("client", connection)
+			go client.receive()
 
 			if requestPath != "" {
-				if err := sendMessage("client", connection, requestPath); err != nil {
+				if rqst, err := loadRequest(requestPath); err != nil {
+					log.Error().Err(err).Msgf("Load request from file %s", requestPath)
+				} else if err := sendRequest("client", rqst, connection); err != nil {
 					log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 				}
 			}
