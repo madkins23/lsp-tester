@@ -1,0 +1,4 @@
+#!/bin/bash
+
+GOOS=windows GOARCH=amd64 go build -o lsp-tester.exe tester/*.go
+ls -l *.exe
