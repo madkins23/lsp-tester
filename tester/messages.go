@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/madkins23/go-utils/log"
+	"github.com/rs/zerolog"
 )
 
 type message struct {
@@ -29,12 +29,12 @@ type responseError struct {
 	Data    interface{} `json:"data"`
 }
 
-type response struct {
-	message
-	ID     int           `json:"id"`
-	Result interface{}   `json:"result"`
-	Error  responseError `json:"error"`
-}
+//type response struct {
+//	message
+//	ID     int           `json:"id"`
+//	Result interface{}   `json:"result"`
+//	Error  responseError `json:"error"`
+//}
 
 func formatMessageJSON(m map[string]interface{}, buffer *bytes.Buffer) error {
 	if msg, found := m["msg"]; found {
@@ -68,7 +68,7 @@ func loadRequest(requestPath string) (*request, error) {
 	return rqst, nil
 }
 
-func sendRequest(from string, rqst *request, connection *net.TCPConn) error {
+func sendRequest(who, to string, rqst *request, connection net.Conn, logger *zerolog.Logger) error {
 	rqst.JSONRPC = jsonRpcVersion
 	rqst.ID = rand.Intn(idRandomRange)
 
@@ -84,14 +84,14 @@ func sendRequest(from string, rqst *request, connection *net.TCPConn) error {
 
 	if content, err := json.Marshal(rqst); err != nil {
 		return fmt.Errorf("marshal request: %w", err)
-	} else if err := sendContent(from, content, connection); err != nil {
+	} else if err := sendContent(to, content, connection, logger); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	}
 	return nil
 }
 
-func sendContent(from string, content []byte, connection *net.TCPConn) error {
-	log.Debug().Str(whom, from).RawJSON("msg", content).Msg("Send")
+func sendContent(to string, content []byte, connection net.Conn, logger *zerolog.Logger) error {
+	logger.Debug().Str(whoFrom, "tester").Str(whoTo, to).RawJSON("msg", content).Msg("Send")
 	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
 	if _, err := connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)

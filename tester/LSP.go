@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	whom = "who"
+	whom    = "&test"
+	whoFrom = "!from"
+	whoTo   = "!to"
 )
 
 func main() {
@@ -62,29 +64,39 @@ func main() {
 	defer log.Info().Msg("LSP finished")
 
 	var client *receiver
+	var server *receiver
 
 	if clientPort > 0 {
 		if connection, err := connectToLSP(hostAddress, clientPort); err != nil {
 			log.Error().Err(err).Msgf("Connect to LSP at %s:%d", hostAddress, clientPort)
+			return
 		} else {
-			client = newReceiver("client", connection)
+			client = newReceiver("client", "server", connection)
 			go client.receive()
 
 			if requestPath != "" {
 				if rqst, err := loadRequest(requestPath); err != nil {
 					log.Error().Err(err).Msgf("Load request from file %s", requestPath)
-				} else if err := sendRequest("client", rqst, connection); err != nil {
+				} else if err := sendRequest("tester", "server", rqst, connection, log.Logger()); err != nil {
 					log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 				}
 			}
 		}
 	}
 
+	if serverPort > 0 {
+		if connection, err := listenForClient(serverPort); err != nil {
+			log.Error().Err(err).Msgf("Listen as LSP on port %d", serverPort)
+			return
+		} else {
+			server = newReceiver("server", "client", connection)
+			if client != nil {
+				client.other = server
+				server.other = client
+			}
+			go server.receive()
+		}
+	}
+
 	time.Sleep(time.Hour)
-}
-
-func server(port uint) error {
-	log.Info().Msg("LSP server mode.")
-
-	return nil
 }
