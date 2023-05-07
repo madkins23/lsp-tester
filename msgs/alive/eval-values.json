@@ -1,0 +1,8 @@
+{
+  "method": "$/alive/eval",
+  "params": {
+    "text": "(values 13 17 23 79)",
+    "package": "cl-user",
+    "storeResult": true
+  }
+}
