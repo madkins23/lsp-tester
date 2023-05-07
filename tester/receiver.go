@@ -87,9 +87,7 @@ func (r *receiver) receive() {
 		} else if length != contentLen {
 			r.rcvLog.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
-			r.rcvLog.Debug().
-				Str(whoFrom, r.partner).Str(whoTo, "tester").Int(sizeOf, contentLen).
-				RawJSON("msg", content[:contentLen]).Msg("Received")
+			logMessage(r.partner, "tester", "Received", content[:contentLen], &r.rcvLog)
 			if r.other != nil {
 				if err := r.other.sendContent(content[:contentLen]); err != nil {
 					r.rcvLog.Error().Err(err).Msg("Sending outgoing message")

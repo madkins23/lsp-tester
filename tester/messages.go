@@ -91,13 +91,96 @@ func sendRequest(who, to string, rqst *request, connection net.Conn, logger *zer
 }
 
 func sendContent(to string, content []byte, connection net.Conn, logger *zerolog.Logger) error {
-	logger.Debug().
-		Str(whoFrom, "tester").Str(whoTo, to).Int(sizeOf, len(content)).
-		RawJSON("msg", content).Msg("Send")
+	logMessage("tester", to, "Send", content, logger)
 	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
 	if _, err := connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)
 	}
 
 	return nil
+}
+
+var (
+	methodByID = make(map[int]string)
+	paramByID  = make(map[int]string)
+)
+
+func logMessage(from, to, msg string, content []byte, logger *zerolog.Logger) {
+	event := logger.Debug().Str(whoFrom, from).Str(whoTo, to).Int(sizeOf, len(content))
+
+	if simpleFmt {
+		data := make(map[string]interface{})
+		if err := json.Unmarshal(content, &data); err != nil {
+			logger.Warn().Err(err).Msg("Unmarshal content")
+			// Fall through to end where raw JSON is added.
+		} else {
+			var intID int
+			var methodFound bool
+			var paramFound bool
+			if id, found := data["id"]; found {
+				if number, ok := id.(float64); ok {
+					intID = int(number)
+					event.Int("id", intID)
+				}
+			}
+			if method, found := data["method"]; found {
+				if name, ok := method.(string); ok {
+					methodFound = true
+					event.Str("method", name)
+					if intID > 0 {
+						methodByID[intID] = name
+					}
+				}
+			}
+			if !methodFound && intID > 0 {
+				if method, found := methodByID[intID]; found {
+					event.Str("from-method", method)
+				}
+			}
+			if params, found := data["params"]; found {
+				if paramData, ok := params.(map[string]interface{}); ok {
+					if paramText, found := paramData["text"]; found {
+						if text, ok := paramText.(string); ok {
+							if len(text) > 32 {
+								text = text[:32]
+							}
+							paramFound = true
+							event.Str("param", text)
+							if intID > 0 {
+								paramByID[intID] = text
+							}
+						}
+					}
+				}
+			}
+			if !paramFound && intID > 0 {
+				if param, found := paramByID[intID]; found {
+					event.Str("method-param", param)
+				}
+			}
+			if result, found := data["result"]; found {
+				if resultData, ok := result.(map[string]interface{}); ok {
+					if resultText, found := resultData["text"]; found {
+						if text, ok := resultText.(string); ok {
+							if len(text) > 32 {
+								text = text[:32]
+							}
+							event.Str("result", text)
+						}
+					}
+				} else if resultBytes, err := json.Marshal(result); err != nil {
+					logger.Warn().Err(err).Msg("Marshal result")
+				} else {
+					if len(resultBytes) > 64 {
+						resultBytes = resultBytes[:64]
+					}
+					event.Str("result", string(resultBytes)+"...")
+				}
+			}
+			event.Msg(msg)
+			return
+		}
+	}
+
+	event.RawJSON("msg", content).Msg(msg)
 }

@@ -21,9 +21,11 @@ const (
 	whoTo   = "!to"
 )
 
-func main() {
-	var ()
+var (
+	simpleFmt bool
+)
 
+func main() {
 	var (
 		hostAddress string
 		clientPort  uint
@@ -37,17 +39,23 @@ func main() {
 	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
 	flags.UintVar(&clientPort, "clientPort", 0, "Client port number")
 	flags.UintVar(&serverPort, "serverPort", 0, "Server port number")
-	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log if true")
+	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log")
+	flags.BoolVar(&simpleFmt, "simple", false, "Simple message format")
 
 	logConfig := log.ConsoleOrFile{}
 	logConfig.AddFlagsToSet(flags, "/tmp/lsp-tester.log") // what if we're on Windows?
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
-			fmt.Printf("responseError parsing command line flags: %s.", err)
+			fmt.Printf("Error parsing command line flags: %s.", err)
 			flags.Usage()
 		}
 		return
+	}
+
+	if expandJSON && simpleFmt {
+		fmt.Println("Flags -expand and -simple are mutually exclusive.")
+		flags.Usage()
 	}
 
 	if err := logConfig.Setup(); err != nil {
@@ -80,9 +88,10 @@ func main() {
 			go client.receive()
 
 			if requestPath != "" {
+				loadLog := log.Logger().With().Str(whom, "fromFile").Logger()
 				if rqst, err := loadRequest(requestPath); err != nil {
 					log.Error().Err(err).Msgf("Load request from file %s", requestPath)
-				} else if err := sendRequest("tester", "server", rqst, connection, log.Logger()); err != nil {
+				} else if err := sendRequest("tester", "server", rqst, connection, &loadLog); err != nil {
 					log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 				}
 			}
