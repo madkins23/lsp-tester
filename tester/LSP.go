@@ -11,16 +11,6 @@ import (
 	"github.com/madkins23/go-utils/log"
 )
 
-const (
-	// These are keys for logging, they start with funny characters to keep them
-	// at the beginning of the log lines because the zerolog.Console mechanism
-	// sorts them alphabetically by key and there's no override.
-	sizeOf  = "#size"
-	whom    = "&test"
-	whoFrom = "!from"
-	whoTo   = "!to"
-)
-
 var (
 	simpleFmt bool
 )
@@ -88,10 +78,10 @@ func main() {
 			go client.receive()
 
 			if requestPath != "" {
-				loadLog := log.Logger().With().Str(whom, "fromFile").Logger()
+				loadLog := log.Logger().With().Str("source", "file").Logger()
 				if rqst, err := loadRequest(requestPath); err != nil {
 					log.Error().Err(err).Msgf("Load request from file %s", requestPath)
-				} else if err := sendRequest("tester", "server", rqst, connection, &loadLog); err != nil {
+				} else if err := sendRequest("server", rqst, connection, &loadLog); err != nil {
 					log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 				}
 			}

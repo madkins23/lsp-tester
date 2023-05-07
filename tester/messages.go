@@ -24,11 +24,11 @@ type request struct {
 	Params interface{} `json:"params"`
 }
 
-type responseError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data"`
-}
+//type responseError struct {
+//	Code    int         `json:"code"`
+//	Message string      `json:"message"`
+//	Data    interface{} `json:"data"`
+//}
 
 //type response struct {
 //	message
@@ -69,7 +69,7 @@ func loadRequest(requestPath string) (*request, error) {
 	return rqst, nil
 }
 
-func sendRequest(who, to string, rqst *request, connection net.Conn, logger *zerolog.Logger) error {
+func sendRequest(to string, rqst *request, connection net.Conn, logger *zerolog.Logger) error {
 	rqst.JSONRPC = jsonRpcVersion
 	rqst.ID = rand.Intn(idRandomRange)
 
@@ -107,7 +107,26 @@ var (
 )
 
 func logMessage(from, to, msg string, content []byte, logger *zerolog.Logger) {
-	event := logger.Debug().Str(whoFrom, from).Str(whoTo, to).Int(sizeOf, len(content))
+	const (
+		leftArrow  = "<--"
+		rightArrow = "-->"
+	)
+	var direction string
+	if from == "client" {
+		direction = from + rightArrow + to
+	} else if from == "server" {
+		direction = to + leftArrow + from
+	} else if to == "client" {
+		direction = to + leftArrow + from
+	} else if to == "server" {
+		direction = from + rightArrow + to
+	}
+	if direction == "" {
+		log.Warn().Str("from", from).Str("to", to).Msg("Uncertain direction")
+		direction = from + leftArrow + to
+	}
+
+	event := logger.Info().Str("!", direction).Int("#size", len(content))
 
 	if simpleFmt {
 		data := make(map[string]interface{})
@@ -119,7 +138,7 @@ func logMessage(from, to, msg string, content []byte, logger *zerolog.Logger) {
 			if id, found := data["id"]; found {
 				if number, ok := id.(float64); ok {
 					ID = int(number)
-					event.Int("id", ID)
+					event.Int("$ID", ID)
 				}
 			}
 
