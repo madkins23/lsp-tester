@@ -39,7 +39,7 @@ func main() {
 	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log if true")
 
 	logConfig := log.ConsoleOrFile{}
-	logConfig.AddFlagsToSet(flags, "/tmp/LSP.log")
+	logConfig.AddFlagsToSet(flags, "/tmp/lsp-tester.log") // what if we're on Windows?
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
