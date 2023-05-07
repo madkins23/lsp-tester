@@ -15,7 +15,7 @@ All work was done on Linux.
 _Your mileage may vary_.
 
 There is no "off" switch for `lsp-tester`.
-Use <ctrl>-C to kill it when you're done.
+Use `<ctrl>-C` to kill it when you're done.
 There is an hour timeout hard-coded in at the moment.
 _Mea culpa_.
 
