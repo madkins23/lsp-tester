@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/madkins23/go-utils/log"
 	"github.com/rs/zerolog"
 )
 
@@ -114,73 +115,78 @@ func logMessage(from, to, msg string, content []byte, logger *zerolog.Logger) {
 			logger.Warn().Err(err).Msg("Unmarshal content")
 			// Fall through to end where raw JSON is added.
 		} else {
-			var intID int
-			var methodFound bool
-			var paramFound bool
+			var ID int
 			if id, found := data["id"]; found {
 				if number, ok := id.(float64); ok {
-					intID = int(number)
-					event.Int("id", intID)
+					ID = int(number)
+					event.Int("id", ID)
 				}
 			}
-			if method, found := data["method"]; found {
-				if name, ok := method.(string); ok {
-					methodFound = true
-					event.Str("method", name)
-					if intID > 0 {
-						methodByID[intID] = name
-					}
-				}
-			}
-			if !methodFound && intID > 0 {
-				if method, found := methodByID[intID]; found {
-					event.Str("from-method", method)
-				}
-			}
-			if params, found := data["params"]; found {
-				if paramData, ok := params.(map[string]interface{}); ok {
-					if paramText, found := paramData["text"]; found {
-						if text, ok := paramText.(string); ok {
-							if len(text) > 32 {
-								text = text[:32]
-							}
-							paramFound = true
-							event.Str("param", text)
-							if intID > 0 {
-								paramByID[intID] = text
-							}
-						}
-					}
-				}
-			}
-			if !paramFound && intID > 0 {
-				if param, found := paramByID[intID]; found {
-					event.Str("method-param", param)
-				}
-			}
-			if result, found := data["result"]; found {
-				if resultData, ok := result.(map[string]interface{}); ok {
-					if resultText, found := resultData["text"]; found {
-						if text, ok := resultText.(string); ok {
-							if len(text) > 32 {
-								text = text[:32]
-							}
-							event.Str("result", text)
-						}
-					}
-				} else if resultBytes, err := json.Marshal(result); err != nil {
-					logger.Warn().Err(err).Msg("Marshal result")
-				} else {
-					if len(resultBytes) > 64 {
-						resultBytes = resultBytes[:64]
-					}
-					event.Str("result", string(resultBytes)+"...")
-				}
-			}
+
+			// TODO: Is there a good way to find a field exists and
+			// then unmarshal the data into a specific struct for better output?
+			// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification
+			addSomething("method", data, event, methodByID, ID, "from-method")
+			addSomething("params", data, event, paramByID, ID, "method-params")
+			addSomething("result", data, event, nil, ID, "")
+			addSomething("error", data, event, nil, ID, "")
 			event.Msg(msg)
 			return
 		}
 	}
 
 	event.RawJSON("msg", content).Msg(msg)
+}
+
+const (
+	maxStringDisplayLen = 32
+	maxHashDisplayLen   = 64
+)
+
+func addSomething(
+	key string, item interface{}, event *zerolog.Event,
+	remember map[int]string, id int, notFoundKey string,
+) bool {
+	var foundSomething bool
+	if text, ok := item.(string); ok {
+		if len(text) > maxStringDisplayLen {
+			text = text[:maxStringDisplayLen]
+		}
+		event.Str(key, text)
+		if remember != nil {
+			remember[id] = text
+		}
+		foundSomething = true
+	} else if number, ok := item.(float64); ok {
+		event.Float64(key, number)
+		foundSomething = true
+	} else if boolean, ok := item.(bool); ok {
+		event.Bool(key, boolean)
+		foundSomething = true
+	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
+		for _, attempt := range []string{key, "text", "path", "value", "data"} {
+			if something, found := hash[attempt]; found {
+				foundSomething = addSomething(key, something, event, remember, id, notFoundKey)
+				if foundSomething {
+					break
+				} else if someHash, ok := something.(map[string]interface{}); ok && len(someHash) > 0 {
+					if resultBytes, err := json.Marshal(someHash); err != nil {
+						log.Warn().Err(err).Msg("Marshal result")
+					} else {
+						if len(resultBytes) > maxHashDisplayLen {
+							resultBytes = append(resultBytes[:maxHashDisplayLen], []byte("...")...)
+						}
+						event.Bytes(key, resultBytes)
+						foundSomething = true
+					}
+				}
+			}
+		}
+	}
+	if id > 0 && !foundSomething {
+		if something, found := remember[id]; found {
+			event.Str(notFoundKey, something)
+		}
+	}
+	return foundSomething
 }
