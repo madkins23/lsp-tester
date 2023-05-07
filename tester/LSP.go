@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -89,18 +90,42 @@ func main() {
 	}
 
 	if serverPort > 0 {
-		if connection, err := listenForClient(serverPort); err != nil {
-			log.Error().Err(err).Msgf("Listen as LSP on port %d", serverPort)
-			return
-		} else {
-			server = newReceiver("server", "client", connection)
+		err := listenForClient(serverPort, func(conn net.Conn) error {
+			log.Info().Msg("Accepting client connection")
+			server = newReceiver("server", "client", conn)
 			if client != nil {
+				log.Info().Msg("Configuring pass-through operation")
 				client.other = server
 				server.other = client
 			}
 			go server.receive()
+			return nil
+		})
+		if err != nil {
+			log.Error().Err(err).Msgf("Listen as LSP on port %d", serverPort)
+			return
 		}
 	}
 
 	time.Sleep(time.Hour)
+}
+
+func listenForClient(port uint, configureFn func(conn net.Conn) error) error {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	defer func() {
+		if err := listener.Close(); err != nil {
+			log.Error().Err(err).Msg("Closing listener")
+		}
+	}()
+
+	for {
+		if conn, err := listener.Accept(); err != nil {
+			log.Warn().Err(err).Msg("Accept connection")
+		} else if err = configureFn(conn); err != nil {
+			log.Warn().Err(err).Msg("Configuring ")
+		}
+	}
 }
