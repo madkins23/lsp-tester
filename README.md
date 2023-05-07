@@ -156,16 +156,17 @@ yielding:
 
 ## Command Line Flags
 
-| Flag           | Type      | Description                                           |
-|----------------|-----------|-------------------------------------------------------|
-| `-clientPort`  | `uint`    | Client port number                                    |
-| `-console`     | `bool`    | Log to the console instead of the specified log file  |
-| `-expand`      | `bool`    | Expand message JSON in log if true                                                      |
-| `-host`        | `string`  |      Host address (default "127.0.0.1")                                                 |
-| `-logFile`     | `string`  |  Log file path (default "/tmp/lsp-tester.log")                                                     |
-| `-logJSON`     | `bool`    |    Log output to file as JSON objects                                                   |
-| `-request`     | `string`  |   Path to requestPath file (client mode)                                                    |
-| `-serverPort`  | `uint`    |  Server port number                                                     |
+| Flag          | Type     | Description                                          |
+|---------------|----------|------------------------------------------------------|
+| `-clientPort` | `uint`   | Client port number                                   |
+| `-console`    | `bool`   | Log to the console instead of the specified log file |
+| `-expand`     | `bool`   | Expand message JSON in log if true                   |
+| `-help`       | `bool`   | Show usage and flags                                 |
+| `-host`       | `string` | Host address (default "127.0.0.1")                   |
+| `-logFile`    | `string` | Log file path (default "/tmp/lsp-tester.log")        |
+| `-logJSON`    | `bool`   | Log output to file as JSON objects                   |
+| `-request`    | `string` | Path to requestPath file (client mode)               |
+| `-serverPort` | `uint`   | Server port number                                   |
 
 Boolean (`bool`) flags do not require a value.
 The flag `-console` is equivalent to `-console=true`.

@@ -31,7 +31,7 @@ func main() {
 		expandJSON  bool
 	)
 
-	flags := flag.NewFlagSet("LSP", flag.ContinueOnError)
+	flags := flag.NewFlagSet("lsp-tester", flag.ContinueOnError)
 	flags.StringVar(&hostAddress, "host", "127.0.0.1", "Host address")
 	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
 	flags.UintVar(&clientPort, "clientPort", 0, "Client port number")
