@@ -128,7 +128,7 @@ func logMessage(from, to, msg string, content []byte, logger *zerolog.Logger) {
 
 	event := logger.Info().Str("!", direction).Int("#size", len(content))
 
-	if simpleFmt {
+	if simpleFormat {
 		data := make(map[string]interface{})
 		if err := json.Unmarshal(content, &data); err != nil {
 			logger.Warn().Err(err).Msg("Unmarshal content")

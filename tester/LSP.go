@@ -9,10 +9,13 @@ import (
 	"time"
 
 	"github.com/madkins23/go-utils/log"
+	"github.com/rs/zerolog"
 )
 
 var (
-	simpleFmt bool
+	defaultWriter  *zerolog.ConsoleWriter
+	expandedWriter *zerolog.ConsoleWriter
+	simpleFormat   bool
 )
 
 func main() {
@@ -30,7 +33,7 @@ func main() {
 	flags.UintVar(&clientPort, "clientPort", 0, "Client port number")
 	flags.UintVar(&serverPort, "serverPort", 0, "Server port number")
 	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log")
-	flags.BoolVar(&simpleFmt, "simple", false, "Simple message format")
+	flags.BoolVar(&simpleFormat, "simple", false, "Simple message format")
 
 	logConfig := log.ConsoleOrFile{}
 	logConfig.AddFlagsToSet(flags, "/tmp/lsp-tester.log") // what if we're on Windows?
@@ -43,7 +46,7 @@ func main() {
 		return
 	}
 
-	if expandJSON && simpleFmt {
+	if expandJSON && simpleFormat {
 		fmt.Println("Flags -expand and -simple are mutually exclusive.")
 		flags.Usage()
 	}
@@ -54,12 +57,15 @@ func main() {
 	}
 	defer logConfig.CloseForDefer()
 
-	if expandJSON {
-		if writer := logConfig.Writer(); writer != nil {
-			fixed := *writer
-			fixed.FieldsExclude = []string{"msg"}
-			fixed.FormatExtra = formatMessageJSON
-			log.SetLogger(log.Logger().Output(fixed))
+	if writer := logConfig.Writer(); writer != nil {
+		// Setup variants of ConsoleWriter so that the logger con be change at runtime.
+		defaultWriter = logConfig.Writer()
+		expand := *defaultWriter
+		expand.FieldsExclude = []string{"msg"}
+		expand.FormatExtra = formatMessageJSON
+		expandedWriter = &expand
+		if expandJSON {
+			log.SetLogger(log.Logger().Output(expandedWriter))
 		}
 	}
 
