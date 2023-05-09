@@ -13,9 +13,14 @@
     <div class="centered">
         <h2>Connections</h2>
         <ul>
-            {{range $name, $rcvr := $}}<li>{{$name}}</li>{{end}}
+            {{range $name, $rcvr := $.receivers}}<li>{{$name}}</li>{{end}}
         </ul>
-        <h2>Server</h2>
+        <h2>LSP Tester</h2>
+        {{if $.messages}}
+        <form action="/send">
+            <input type="submit" value="Send Message">
+        </form>
+        {{end}}
         <form action="/exit">
             <input type="submit" value="Exit LSP Tester">
         </form>

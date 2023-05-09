@@ -56,6 +56,23 @@ const (
 	jsonRpcVersion  = "2.0"
 )
 
+func loadMessageFiles() error {
+	if messageDir == "" {
+		// Nothing to do here
+	} else if entries, err := os.ReadDir(messageDir); err != nil {
+		messages = make([]string, 0)
+		return fmt.Errorf("read message directory %s: %w", messageDir, err)
+	} else {
+		messages = make([]string, 0, len(entries))
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				messages = append(messages, entry.Name())
+			}
+		}
+	}
+	return nil
+}
+
 func loadRequest(requestPath string) (*request, error) {
 	var err error
 	var content []byte
@@ -69,7 +86,7 @@ func loadRequest(requestPath string) (*request, error) {
 	return rqst, nil
 }
 
-func sendRequest(to string, rqst *request, connection net.Conn, logger *zerolog.Logger) error {
+func sendRequest(to string, rqst *request, connection net.Conn) error {
 	rqst.JSONRPC = jsonRpcVersion
 	rqst.ID = rand.Intn(idRandomRange)
 
@@ -85,14 +102,14 @@ func sendRequest(to string, rqst *request, connection net.Conn, logger *zerolog.
 
 	if content, err := json.Marshal(rqst); err != nil {
 		return fmt.Errorf("marshal request: %w", err)
-	} else if err := sendContent(to, content, connection, logger); err != nil {
+	} else if err := sendContent(to, content, connection); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	}
 	return nil
 }
 
-func sendContent(to string, content []byte, connection net.Conn, logger *zerolog.Logger) error {
-	logMessage("tester", to, "Send", content, logger)
+func sendContent(to string, content []byte, connection net.Conn) error {
+	logMessage("tester", to, "Send", content)
 	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
 	if _, err := connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)
@@ -106,7 +123,7 @@ var (
 	paramByID  = make(map[int]string)
 )
 
-func logMessage(from, to, msg string, content []byte, logger *zerolog.Logger) {
+func logMessage(from, to, msg string, content []byte) {
 	const (
 		leftArrow  = "<--"
 		rightArrow = "-->"
@@ -126,12 +143,12 @@ func logMessage(from, to, msg string, content []byte, logger *zerolog.Logger) {
 		direction = from + leftArrow + to
 	}
 
-	event := logger.Info().Str("!", direction).Int("#size", len(content))
+	event := log.Info().Str("!", direction).Int("#size", len(content))
 
 	if simpleFormat {
 		data := make(map[string]interface{})
 		if err := json.Unmarshal(content, &data); err != nil {
-			logger.Warn().Err(err).Msg("Unmarshal content")
+			log.Warn().Err(err).Msg("Unmarshal content")
 			// Fall through to end where raw JSON is added.
 		} else {
 			var ID int

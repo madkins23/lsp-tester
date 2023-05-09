@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path"
 	"strconv"
 	"sync"
 	"time"
@@ -15,11 +16,19 @@ import (
 )
 
 var (
+	simpleFormat bool
+	messageDir   string
+)
+
+var (
 	defaultWriter  *zerolog.ConsoleWriter
 	expandedWriter *zerolog.ConsoleWriter
-	simpleFormat   bool
-	listener       net.Listener
-	receivers      = make(map[string]*receiver)
+)
+
+var (
+	listener  net.Listener
+	messages  []string
+	receivers = make(map[string]*receiver)
 	// TODO: Make something that can return number of waiting things.
 	waiter sync.WaitGroup
 )
@@ -42,9 +51,10 @@ func main() {
 	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log")
 	flags.BoolVar(&simpleFormat, "simple", false, "Simple message format")
 	flags.UintVar(&webPort, "webPort", 0, "Web port number to enable web access")
+	flags.StringVar(&messageDir, "messages", "", "Path to directory of message files")
 
 	logConfig := log.ConsoleOrFile{}
-	logConfig.AddFlagsToSet(flags, "/tmp/lsp-tester.log") // what if we're on Windows?
+	logConfig.AddFlagsToSet(flags, path.Join(os.TempDir(), "/lsp-tester.log"))
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
@@ -94,10 +104,9 @@ func main() {
 		go client.receive()
 
 		if requestPath != "" {
-			loadLog := log.Logger().With().Str("src", "file").Logger()
 			if rqst, err := loadRequest(requestPath); err != nil {
 				log.Error().Err(err).Msgf("Load request from file %s", requestPath)
-			} else if err := sendRequest("server", rqst, connection, &loadLog); err != nil {
+			} else if err := sendRequest("server", rqst, connection); err != nil {
 				log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 			}
 		}

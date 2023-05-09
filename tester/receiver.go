@@ -93,7 +93,7 @@ func (r *receiver) receive() {
 		} else if length != contentLen {
 			log.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
-			logMessage(r.connectedTo, "tester", "Rcvd", content[:contentLen], log.Logger())
+			logMessage(r.connectedTo, "tester", "Rcvd", content[:contentLen])
 			if r.other != nil {
 				if err := r.other.sendContent(content[:contentLen]); err != nil {
 					log.Error().Err(err).Msg("Sending outgoing message")
@@ -104,7 +104,7 @@ func (r *receiver) receive() {
 }
 
 func (r *receiver) sendContent(content []byte) error {
-	if err := sendContent(r.connectedTo, content, r.conn, log.Logger()); err != nil {
+	if err := sendContent(r.connectedTo, content, r.conn); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	} else {
 		return nil

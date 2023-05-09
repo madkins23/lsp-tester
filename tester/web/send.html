@@ -1,0 +1,42 @@
+<html>
+<head>
+    <title>lsp-tester: send</title>
+    <style>
+        .centered {
+            margin: auto;
+            width: 50%;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+<a href="/">Main Page</a>
+<div class="centered">
+    <form action="/sent">
+        <table>
+            <tr>
+                <td>
+                    <label for="target">Target for message</label>
+                </td>
+                <td>
+                    <select name="target" id="target">
+                        {{range $name, $rcvr := $.receivers}}<option value="{{$name}}">{{$name}}</option>{{end}}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label for="message">Message to send</label>
+                </td>
+                <td>
+                    <select name="message" id="message">
+                        {{range $msg := $.messages}}<option value="{{$msg}}">{{$msg}}</option>{{end}}
+                    </select>
+                </td>
+            </tr>
+            <tr><td colspan="2" style="text-align:center;"><input type="submit" value="Send Message"></td></tr>
+        </table>
+    </form>
+</div>
+</body>
+</html>

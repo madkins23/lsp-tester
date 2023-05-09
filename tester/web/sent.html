@@ -1,18 +1,23 @@
 <html>
 <head>
-    <title>lsp-tester: exit</title>
+    <title>lsp-tester: sent</title>
     <style>
         .centered {
             margin: auto;
             width: 50%;
             padding: 10px;
         }
+        .error {
+            color :red;
+        }
     </style>
 </head>
 <body>
+<a href="/">Main Page</a>
 <div class="centered">
     <h2>LSP Tester</h2>
-    <p>Web server has exited.</p>
+    <p>Message has been sent.</p>
+    {{if $.error}}<p class="error">{{$.error}}</p>{{end}}
 </div>
 </body>
 </html>
