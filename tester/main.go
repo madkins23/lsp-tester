@@ -18,8 +18,10 @@ var (
 	defaultWriter  *zerolog.ConsoleWriter
 	expandedWriter *zerolog.ConsoleWriter
 	simpleFormat   bool
+	listener       net.Listener
 	receivers      = make(map[string]*receiver)
-	waiter         sync.WaitGroup
+	// TODO: Make something that can return number of waiting things.
+	waiter sync.WaitGroup
 )
 
 func main() {
@@ -102,22 +104,21 @@ func main() {
 	}
 
 	if serverPort > 0 {
-		listener, err := getListener(serverPort)
-		if err != nil {
+		var err error
+		if listener, err = net.Listen("tcp", fmt.Sprintf(":%d", serverPort)); err != nil {
 			log.Error().Err(err).Msgf("Make listener on %d", serverPort)
+		} else {
+			go listenForClient(serverPort, listener, func(conn net.Conn) {
+				log.Info().Msg("Accepting client connectedTo")
+				server = newReceiver("client", conn)
+				if client != nil {
+					log.Info().Msg("Configuring pass-through operation")
+					client.other = server
+					server.other = client
+				}
+				go server.receive()
+			})
 		}
-
-		go listenForClient(serverPort, listener, func(conn net.Conn) error {
-			log.Info().Msg("Accepting client connectedTo")
-			server = newReceiver("client", conn)
-			if client != nil {
-				log.Info().Msg("Configuring pass-through operation")
-				client.other = server
-				server.other = client
-			}
-			go server.receive()
-			return nil
-		})
 	}
 
 	if webPort > 0 {
@@ -143,31 +144,22 @@ func connectToLSP(host string, port uint) (net.Conn, error) {
 	}
 }
 
-func getListener(port uint) (net.Listener, error) {
-	if listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
-		return nil, fmt.Errorf("listen: %w", err)
-	} else {
-		return listener, nil
-	}
-}
-
-func listenForClient(port uint, listener net.Listener, configureFn func(conn net.Conn) error) {
+func listenForClient(port uint, listener net.Listener, configureFn func(conn net.Conn)) {
 	log.Info().Uint("port", port).Msg("Listener starting")
 	defer log.Info().Uint("port", port).Msg("Listener finished")
 
 	waiter.Add(1)
 	defer func() {
-		if err := listener.Close(); err != nil {
-			log.Error().Err(err).Msg("Closing listener")
-		}
 		waiter.Done()
 	}()
 
 	for {
-		if conn, err := listener.Accept(); err != nil {
-			log.Warn().Err(err).Msg("Accept connectedTo")
-		} else if err = configureFn(conn); err != nil {
-			log.Warn().Err(err).Msg("Configure connectedTo")
+		if conn, err := listener.Accept(); err == nil {
+			configureFn(conn)
+		} else if errors.Is(err, net.ErrClosed) {
+			break
+		} else {
+			log.Warn().Err(err).Msg("Listener accept")
 		}
 	}
 }

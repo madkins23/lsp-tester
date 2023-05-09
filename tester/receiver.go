@@ -39,11 +39,15 @@ func newReceiver(connectedTo string, connection net.Conn) *receiver {
 	return rcvr
 }
 
+func (r *receiver) kill() error {
+	return r.conn.Close()
+}
+
 func (r *receiver) receive() {
-	log.Info().Str("connected-to", r.connectedTo).Msg("Receiver starting")
+	log.Info().Str("connection", r.connectedTo).Msg("Receiver starting")
 	waiter.Add(1)
 	defer func() {
-		log.Info().Str("connected-to", r.connectedTo).Msg("Receiver finished")
+		log.Info().Str("connection", r.connectedTo).Msg("Receiver finished")
 		delete(receivers, r.connectedTo)
 		waiter.Done()
 	}()
@@ -56,10 +60,10 @@ func (r *receiver) receive() {
 		for {
 			lineBytes, isPrefix, err := reader.ReadLine()
 			if err != nil {
-				log.Error().Err(err).Msg("Read first line")
 				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
 					return
 				}
+				log.Error().Err(err).Msg("Read first line")
 				continue
 			} else if isPrefix {
 				log.Error().Err(err).Msg("Only beginning of header line read")
