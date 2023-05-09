@@ -29,7 +29,7 @@ type receiver struct {
 
 func newReceiver(connectedTo string, connection net.Conn) *receiver {
 	if connectedTo == "client" {
-		connectedTo += strconv.Itoa(int(sequence.Add(1)))
+		connectedTo += "-" + strconv.Itoa(int(sequence.Add(1)))
 	}
 	rcvr := &receiver{
 		connectedTo: connectedTo,

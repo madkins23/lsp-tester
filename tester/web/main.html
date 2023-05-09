@@ -1,10 +1,24 @@
 <html>
 <head>
     <title>lsp-tester: main</title>
+    <style>
+        .centered {
+            margin: auto;
+            width: 50%;
+            padding: 10px;
+        }
+    </style>
 </head>
 <body>
-<form action="/exit">
-    <input type="submit" value="Exit LSP Tester">
-</form>
+    <div class="centered">
+        <h2>Connections</h2>
+        <ul>
+            {{range $name, $rcvr := $}}<li>{{$name}}</li>{{end}}
+        </ul>
+        <h2>Server</h2>
+        <form action="/exit">
+            <input type="submit" value="Exit LSP Tester">
+        </form>
+    </div>
 </body>
 </html>

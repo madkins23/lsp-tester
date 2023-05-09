@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 
@@ -22,7 +23,7 @@ func webServer(port uint) {
 		waiter.Done()
 	}()
 
-	if err := handlePage("main", "/", nil); err != nil {
+	if err := handlePage("main", "/", receivers, nil); err != nil {
 		log.Error().Err(err).Str("page", "main").Msg("Configuring page handler")
 	}
 
@@ -47,7 +48,7 @@ func webServer(port uint) {
 			log.Error().Err(err).Msg("Error shutting down web server")
 		}
 	}()
-	if err := handlePage("exit", "/exit", func() {
+	if err := handlePage("exit", "/exit", nil, func() {
 		exitChannel <- true
 	}); err != nil {
 		log.Error().Err(err).Str("page", "exit").Msg("Configuring page handler")
@@ -58,12 +59,14 @@ func webServer(port uint) {
 	}
 }
 
-func handlePage(name, url string, action func()) error {
+func handlePage(name, url string, data any, action func()) error {
 	if page, err := webPages.ReadFile("web/" + name + ".html"); err != nil {
 		return fmt.Errorf("loading web page %s: %w", name, err)
+	} else if tmpl, err := template.New(name).Parse(string(page)); err != nil {
+		return fmt.Errorf("template for web page %s: %w", name, err)
 	} else {
 		http.HandleFunc(url, func(w http.ResponseWriter, r *http.Request) {
-			if _, err := w.Write(page); err != nil {
+			if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 				log.Error().Err(err).Str("page", name).Msg("Error serving page")
 				http.Error(w,
 					http.StatusText(http.StatusInternalServerError),
