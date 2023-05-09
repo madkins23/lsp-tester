@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/madkins23/go-utils/log"
@@ -16,6 +18,8 @@ var (
 	defaultWriter  *zerolog.ConsoleWriter
 	expandedWriter *zerolog.ConsoleWriter
 	simpleFormat   bool
+	receivers      = make(map[string]*receiver)
+	waiter         sync.WaitGroup
 )
 
 func main() {
@@ -25,15 +29,17 @@ func main() {
 		serverPort  uint
 		requestPath string
 		expandJSON  bool
+		webPort     uint
 	)
 
 	flags := flag.NewFlagSet("lsp-tester", flag.ContinueOnError)
 	flags.StringVar(&hostAddress, "host", "127.0.0.1", "Host address")
 	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
-	flags.UintVar(&clientPort, "clientPort", 0, "Client port number")
-	flags.UintVar(&serverPort, "serverPort", 0, "Server port number")
+	flags.UintVar(&clientPort, "clientPort", 0, "Port number for contacting LSP as client")
+	flags.UintVar(&serverPort, "serverPort", 0, "Port number served for extension to contact")
 	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log")
 	flags.BoolVar(&simpleFormat, "simple", false, "Simple message format")
+	flags.UintVar(&webPort, "webPort", 0, "Web port number to enable web access")
 
 	logConfig := log.ConsoleOrFile{}
 	logConfig.AddFlagsToSet(flags, "/tmp/lsp-tester.log") // what if we're on Windows?
@@ -76,28 +82,34 @@ func main() {
 	var server *receiver
 
 	if clientPort > 0 {
-		if connection, err := connectToLSP(hostAddress, clientPort); err != nil {
+		connection, err := connectToLSP(hostAddress, clientPort)
+		if err != nil {
 			log.Error().Err(err).Msgf("Connect to LSP at %s:%d", hostAddress, clientPort)
 			return
-		} else {
-			client = newReceiver("client", "server", connection)
-			go client.receive()
+		}
 
-			if requestPath != "" {
-				loadLog := log.Logger().With().Str("source", "file").Logger()
-				if rqst, err := loadRequest(requestPath); err != nil {
-					log.Error().Err(err).Msgf("Load request from file %s", requestPath)
-				} else if err := sendRequest("server", rqst, connection, &loadLog); err != nil {
-					log.Error().Err(err).Msgf("Send message from file %s", requestPath)
-				}
+		client = newReceiver("server", connection)
+		go client.receive()
+
+		if requestPath != "" {
+			loadLog := log.Logger().With().Str("src", "file").Logger()
+			if rqst, err := loadRequest(requestPath); err != nil {
+				log.Error().Err(err).Msgf("Load request from file %s", requestPath)
+			} else if err := sendRequest("server", rqst, connection, &loadLog); err != nil {
+				log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 			}
 		}
 	}
 
 	if serverPort > 0 {
-		err := listenForClient(serverPort, func(conn net.Conn) error {
-			log.Info().Msg("Accepting client connection")
-			server = newReceiver("server", "client", conn)
+		listener, err := getListener(serverPort)
+		if err != nil {
+			log.Error().Err(err).Msgf("Make listener on %d", serverPort)
+		}
+
+		go listenForClient(serverPort, listener, func(conn net.Conn) error {
+			log.Info().Msg("Accepting client connectedTo")
+			server = newReceiver("client", conn)
 			if client != nil {
 				log.Info().Msg("Configuring pass-through operation")
 				client.other = server
@@ -106,31 +118,56 @@ func main() {
 			go server.receive()
 			return nil
 		})
-		if err != nil {
-			log.Error().Err(err).Msgf("Listen as LSP on port %d", serverPort)
-			return
-		}
 	}
 
-	time.Sleep(time.Hour)
+	if webPort > 0 {
+		go webServer(webPort)
+	}
+
+	// TODO: something less arbitrary here
+	time.Sleep(1 * time.Second)
+
+	waiter.Wait()
 }
 
-func listenForClient(port uint, configureFn func(conn net.Conn) error) error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+func connectToLSP(host string, port uint) (net.Conn, error) {
+	tcpAddress := host + ":" + strconv.Itoa(int(port))
+	var connection *net.TCPConn
+
+	if tcpAddr, err := net.ResolveTCPAddr("tcp", tcpAddress); err != nil {
+		return nil, fmt.Errorf("resolve TCP address: %w", err)
+	} else if connection, err = net.DialTCP("tcp", nil, tcpAddr); err != nil {
+		return nil, fmt.Errorf("dial TCP address: %w", err)
+	} else {
+		return connection, nil
 	}
+}
+
+func getListener(port uint) (net.Listener, error) {
+	if listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
+		return nil, fmt.Errorf("listen: %w", err)
+	} else {
+		return listener, nil
+	}
+}
+
+func listenForClient(port uint, listener net.Listener, configureFn func(conn net.Conn) error) {
+	log.Info().Uint("port", port).Msg("Listener starting")
+	defer log.Info().Uint("port", port).Msg("Listener finished")
+
+	waiter.Add(1)
 	defer func() {
 		if err := listener.Close(); err != nil {
 			log.Error().Err(err).Msg("Closing listener")
 		}
+		waiter.Done()
 	}()
 
 	for {
 		if conn, err := listener.Accept(); err != nil {
-			log.Warn().Err(err).Msg("Accept connection")
+			log.Warn().Err(err).Msg("Accept connectedTo")
 		} else if err = configureFn(conn); err != nil {
-			log.Warn().Err(err).Msg("Configuring ")
+			log.Warn().Err(err).Msg("Configure connectedTo")
 		}
 	}
 }

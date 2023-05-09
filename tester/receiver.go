@@ -8,6 +8,7 @@ import (
 	"net"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/madkins23/go-utils/log"
 )
@@ -16,33 +17,37 @@ const (
 	contentLengthMatch = `Content-Length:\s*(\d+)`
 )
 
-func connectToLSP(host string, port uint) (net.Conn, error) {
-	tcpAddress := host + ":" + strconv.Itoa(int(port))
-	var connection *net.TCPConn
-
-	if tcpAddr, err := net.ResolveTCPAddr("tcp", tcpAddress); err != nil {
-		return nil, fmt.Errorf("resolve TCP address: %w", err)
-	} else if connection, err = net.DialTCP("tcp", nil, tcpAddr); err != nil {
-		return nil, fmt.Errorf("dial TCP address: %w", err)
-	} else {
-		return connection, nil
-	}
-}
+var (
+	sequence atomic.Uint32
+)
 
 type receiver struct {
-	partner string
-	conn    net.Conn
-	other   *receiver
+	connectedTo string
+	conn        net.Conn
+	other       *receiver
 }
 
-func newReceiver(name, partner string, connection net.Conn) *receiver {
-	return &receiver{
-		partner: partner,
-		conn:    connection,
+func newReceiver(connectedTo string, connection net.Conn) *receiver {
+	if connectedTo == "client" {
+		connectedTo += strconv.Itoa(int(sequence.Add(1)))
 	}
+	rcvr := &receiver{
+		connectedTo: connectedTo,
+		conn:        connection,
+	}
+	receivers[connectedTo] = rcvr
+	return rcvr
 }
 
 func (r *receiver) receive() {
+	log.Info().Str("connected-to", r.connectedTo).Msg("Receiver starting")
+	waiter.Add(1)
+	defer func() {
+		log.Info().Str("connected-to", r.connectedTo).Msg("Receiver finished")
+		delete(receivers, r.connectedTo)
+		waiter.Done()
+	}()
+
 	content := make([]byte, 1048576) // 1 Mb
 	reader := bufio.NewReader(r.conn)
 
@@ -84,7 +89,7 @@ func (r *receiver) receive() {
 		} else if length != contentLen {
 			log.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
-			logMessage(r.partner, "tester", "Rcvd", content[:contentLen], log.Logger())
+			logMessage(r.connectedTo, "tester", "Rcvd", content[:contentLen], log.Logger())
 			if r.other != nil {
 				if err := r.other.sendContent(content[:contentLen]); err != nil {
 					log.Error().Err(err).Msg("Sending outgoing message")
@@ -95,7 +100,7 @@ func (r *receiver) receive() {
 }
 
 func (r *receiver) sendContent(content []byte) error {
-	if err := sendContent(r.partner, content, r.conn, log.Logger()); err != nil {
+	if err := sendContent(r.connectedTo, content, r.conn, log.Logger()); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	} else {
 		return nil
