@@ -14,6 +14,8 @@ import (
 	"github.com/madkins23/go-utils/log"
 )
 
+type webData map[string]any
+
 func webServer(port uint) {
 	log.Info().Uint("port", port).Msg("Web server starting")
 	waiter.Add(1)
@@ -26,14 +28,14 @@ func webServer(port uint) {
 		log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
 	}
 
-	data := map[string]any{
+	data := webData{
 		"messages":  messages,
 		"receivers": receivers,
 	}
 
 	const configureError = "Configuring page handler"
 
-	if err := handlePage("main", "/", data, nil, nil); err != nil {
+	if err := handlePage("main", "/", data, mainPre, nil); err != nil {
 		log.Error().Err(err).Str("page", "main").Msg(configureError)
 	}
 
@@ -41,10 +43,8 @@ func webServer(port uint) {
 		log.Error().Err(err).Str("page", "send").Msg(configureError)
 	}
 
-	sentData := make(map[string]any)
-	if err := handlePage("sent", "/sent", data, func(r *http.Request) {
-		sendMessage(r, sentData)
-	}, nil); err != nil {
+	sentData := make(webData)
+	if err := handlePage("sent", "/sent", sentData, sendMessage, nil); err != nil {
 		log.Error().Err(err).Str("page", "sent").Msg(configureError)
 	}
 
@@ -69,7 +69,7 @@ func webServer(port uint) {
 			log.Error().Err(err).Msg("Error shutting down web server")
 		}
 	}()
-	if err := handlePage("exit", "/exit", nil, nil, func(_ *http.Request) {
+	if err := handlePage("exit", "/exit", nil, nil, func(_ *http.Request, _ webData) {
 		exitChannel <- true
 	}); err != nil {
 		log.Error().Err(err).Str("page", "exit").Msg(configureError)
@@ -83,7 +83,7 @@ func webServer(port uint) {
 //go:embed web
 var webPages embed.FS
 
-func handlePage(name, url string, data any, pre, post func(r *http.Request)) error {
+func handlePage(name, url string, data webData, pre, post func(r *http.Request, data webData)) error {
 	if page, err := webPages.ReadFile("web/" + name + ".html"); err != nil {
 		return fmt.Errorf("loading web page %s: %w", name, err)
 	} else if tmpl, err := template.New(name).Parse(string(page)); err != nil {
@@ -91,7 +91,7 @@ func handlePage(name, url string, data any, pre, post func(r *http.Request)) err
 	} else {
 		http.HandleFunc(url, func(w http.ResponseWriter, r *http.Request) {
 			if pre != nil {
-				pre(r)
+				pre(r, data)
 			}
 			if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
 				log.Error().Err(err).Str("page", name).Msg("Error serving page")
@@ -100,17 +100,29 @@ func handlePage(name, url string, data any, pre, post func(r *http.Request)) err
 					http.StatusInternalServerError)
 			}
 			if post != nil {
-				post(r)
+				post(r, data)
 			}
 		})
 		return nil
 	}
 }
 
-func sendMessage(rqst *http.Request, data map[string]any) {
-	if rqst.Method == "" {
-		data["error"] = "Method: " + rqst.Method
+func mainPre(rqst *http.Request, data webData) {
+	if rqst.Method != "POST" {
+		return
+	}
+	switch rqst.FormValue("form") {
+	case "send":
+		sendMessage(rqst, data)
+	}
+}
+
+func sendMessage(rqst *http.Request, data webData) {
+	if rqst.Method != "POST" {
+		data["error"] = "Wrong method: " + rqst.Method
 	} else {
+		log.Debug().Str("name", rqst.FormValue("name")).Msg("Form Name?")
+
 		var errs = make([]string, 0, 2)
 		var message, target string
 		var rcvr *receiver
@@ -123,14 +135,16 @@ func sendMessage(rqst *http.Request, data map[string]any) {
 			errs = append(errs, "No message specified")
 		} else if rqst, err := loadRequest(path.Join(messageDir, message)); err != nil {
 			errs = append(errs,
-				fmt.Sprintf("Load request from file %s: %w", message, err))
+				fmt.Sprintf("Load request from file %s: %s", message, err))
 		} else if rcvr == nil {
 		} else if err := sendRequest(target, rqst, rcvr.conn); err != nil {
 			errs = append(errs,
-				fmt.Sprintf("Send message to server %s: %w", target, err))
+				fmt.Sprintf("Send message to server %s: %s", target, err))
 		}
 		if len(errs) > 0 {
 			data["error"] = "<p>" + strings.Join(errs, "</p><p>") + "</p>"
+		} else {
+			data["result"] = "Message sent"
 		}
 	}
 }
