@@ -1,0 +1,60 @@
+{{define "skeleton"}}
+<html lang="en">
+<head>
+    <title>lsp-tester: {{$.page}}</title>
+    <style>
+        body {
+            background-color: lightgray;
+        }
+        .content {
+            margin: auto;
+            min-width: 40em;
+            max-width: 60em;
+        }
+        .error {
+            color :red;
+        }
+        .header {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            grid-gap: 20px;
+        }
+        .icon {
+            border-color: gray;
+            border-style: outset;
+            border-width: 3px;
+            margin-left: 5px;
+            padding: 2px;
+        }
+        .icons {
+            margin-left: auto;
+        }
+        .text {
+            background-color: white;
+            border-color: gray;
+            border-style: inset;
+            border-width: 2px;
+            margin: 5px;
+            min-height: 2em;
+            padding: 3px;
+        }
+    </style>
+</head>
+<body>
+<div class="content">
+    <div class="header">
+        <div><h1>LSP Tester: {{$.page}}</h1></div>
+        <div class="icons">{{template "icons" .}}</div>
+    </div>
+{{template "content" .}}
+</div>
+</body>
+</html>
+{{end}}
+
+{{define "icons"}}
+{{if not $.exit}}
+<a href="/"><img src="/image/home.png" alt="Main Page" class="icon"></image></a>
+<a href="/exit"><img src="/image/bomb.png" alt="Exit LSP Tester" class="icon"></img></a>
+{{end}}
+{{end}}

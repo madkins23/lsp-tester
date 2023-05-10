@@ -24,19 +24,26 @@ func webServer(port uint) {
 		waiter.Done()
 	}()
 
-	if err := loadMessageFiles(); err != nil {
-		log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
-	}
-
 	data := webData{
 		"messages":  messages,
 		"receivers": receivers,
 	}
 
-	const configureError = "Configuring page handler"
+	if err := loadMessageFiles(); err != nil {
+		log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
+	}
+
+	const configurePageError = "Configuring page handler"
+	const configureImageError = "Configuring image handler"
 
 	if err := handlePage("main", "/", data, mainPre, nil); err != nil {
-		log.Error().Err(err).Str("page", "main").Msg(configureError)
+		log.Error().Err(err).Str("page", "main").Msg(configurePageError)
+	}
+
+	for _, name := range []string{"home.png", "bomb.png"} {
+		if err := handleImage(name); err != nil {
+			log.Error().Err(err).Str("image", name).Msg(configureImageError)
+		}
 	}
 
 	server := http.Server{
@@ -60,10 +67,12 @@ func webServer(port uint) {
 			log.Error().Err(err).Msg("Error shutting down web server")
 		}
 	}()
-	if err := handlePage("exit", "/exit", nil, nil, func(_ *http.Request, _ webData) {
+	if err := handlePage("exit", "/exit", nil, func(_ *http.Request, data webData) {
+		data["exit"] = true
+	}, func(_ *http.Request, _ webData) {
 		exitChannel <- true
 	}); err != nil {
-		log.Error().Err(err).Str("page", "exit").Msg(configureError)
+		log.Error().Err(err).Str("page", "exit").Msg(configurePageError)
 	}
 
 	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
@@ -71,24 +80,44 @@ func webServer(port uint) {
 	}
 }
 
-//go:embed web
+//go:embed web/template
 var webPages embed.FS
 
+//go:embed web/image
+var webImages embed.FS
+
+func handleImage(name string) error {
+	if buf, err := webImages.ReadFile("web/image/" + name); err != nil {
+		return fmt.Errorf("read image file %s: %w", name, err)
+	} else {
+		http.HandleFunc("/image/"+name, func(w http.ResponseWriter, r *http.Request) {
+			log.Debug().Str("URL", r.URL.Path).Msg("Image handler")
+			name := r.URL.Path[7:]
+			log.Debug().Str("Image", name).Msg("Image Name")
+			w.Header().Set("Content-Type", "image/png")
+			if _, err := w.Write(buf); err != nil {
+				log.Error().Err(err).Str("image", name).Msg("Write image to HTTP response")
+			}
+		})
+		return nil
+	}
+}
+
 func handlePage(name, url string, startData webData, pre, post func(r *http.Request, data webData)) error {
-	if page, err := webPages.ReadFile("web/" + name + ".html"); err != nil {
-		return fmt.Errorf("loading web page %s: %w", name, err)
-	} else if tmpl, err := template.New(name).Parse(string(page)); err != nil {
-		return fmt.Errorf("template for web page %s: %w", name, err)
+	if tmpl, err := template.ParseFS(webPages, "web/template/skeleton.html", "web/template/"+name+".html"); err != nil {
+		return fmt.Errorf("parse template files for %s: %w", name, err)
 	} else {
 		http.HandleFunc(url, func(w http.ResponseWriter, r *http.Request) {
 			data := make(webData)
 			for key, value := range startData {
 				data[key] = value
 			}
+			data["page"] = name
+
 			if pre != nil {
 				pre(r, data)
 			}
-			if err := tmpl.ExecuteTemplate(w, name, data); err != nil {
+			if err := tmpl.ExecuteTemplate(w, "skeleton", data); err != nil {
 				log.Error().Err(err).Str("page", name).Msg("Error serving page")
 				http.Error(w,
 					http.StatusText(http.StatusInternalServerError),
