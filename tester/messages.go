@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/madkins23/go-utils/log"
 	"github.com/rs/zerolog"
@@ -129,11 +130,11 @@ func logMessage(from, to, msg string, content []byte) {
 		rightArrow = "-->"
 	)
 	var direction string
-	if from == "client" {
+	if strings.HasPrefix(from, "client") {
 		direction = from + rightArrow + to
 	} else if from == "server" {
 		direction = to + leftArrow + from
-	} else if to == "client" {
+	} else if strings.HasPrefix(to, "client") {
 		direction = to + leftArrow + from
 	} else if to == "server" {
 		direction = from + rightArrow + to
