@@ -23,6 +23,7 @@ var (
 var (
 	defaultWriter  *zerolog.ConsoleWriter
 	expandedWriter *zerolog.ConsoleWriter
+	logFormat      = "default"
 )
 
 var (
@@ -67,6 +68,8 @@ func main() {
 	if expandJSON && simpleFormat {
 		fmt.Println("Flags -expand and -simple are mutually exclusive.")
 		flags.Usage()
+	} else if simpleFormat {
+		logFormat = "simple"
 	}
 
 	if err := logConfig.Setup(); err != nil {
@@ -78,12 +81,13 @@ func main() {
 	if writer := logConfig.Writer(); writer != nil {
 		// Setup variants of ConsoleWriter so that the logger con be change at runtime.
 		defaultWriter = logConfig.Writer()
-		expand := *defaultWriter
-		expand.FieldsExclude = []string{"msg"}
-		expand.FormatExtra = formatMessageJSON
-		expandedWriter = &expand
+		expanded := *defaultWriter
+		expanded.FieldsExclude = []string{"msg"}
+		expanded.FormatExtra = formatMessageJSON
+		expandedWriter = &expanded
 		if expandJSON {
 			log.SetLogger(log.Logger().Output(expandedWriter))
+			logFormat = "expanded"
 		}
 	}
 

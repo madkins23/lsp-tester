@@ -5,7 +5,7 @@
 </ul>
 <h2>Messaging</h2>
 {{if $.messages}}
-<form action="/" method="post" class="bordered">
+<form action="/" method="post">
     <input type="hidden" name="form" value="send" />
     <table>
         <tr>
@@ -28,6 +28,15 @@
     </table>
 </form>
 {{end}}
+<h2>Log Format</h2>
+<form action="/" method="post">
+    <input type="hidden" name="form" value="format" />
+    {{range $index, $format := $.formats}}
+        <input type="radio" id="{{$format}}" name="logFormat" value="{{$format}}" {{if eq $format $.logFormat}}checked{{end}}>
+        <label for="{{$format}}">{{$format}}</label><br>
+    {{end}}
+    <input type="submit" value="Change Log Format">
+</form>
 <h2>Result</h2>
 <div class="text">
     {{$.result}}

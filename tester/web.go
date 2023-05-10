@@ -29,6 +29,8 @@ func webServer(port uint) {
 	}
 
 	data := webData{
+		"logFormat": logFormat,
+		"formats":   []string{"default", "expanded", "simple"},
 		"messages":  messages,
 		"receivers": receivers,
 	}
@@ -36,7 +38,7 @@ func webServer(port uint) {
 	const configurePageError = "Configuring page handler"
 	const configureImageError = "Configuring image handler"
 
-	if err := handlePage("main", "/", data, mainPre, nil); err != nil {
+	if err := handlePage("main", "/", data, preMain, nil); err != nil {
 		log.Error().Err(err).Str("page", "main").Msg(configurePageError)
 	}
 
@@ -111,6 +113,7 @@ func handlePage(name, url string, startData webData, pre, post func(r *http.Requ
 				data[key] = value
 			}
 			data["page"] = name
+			data["logFormat"] = logFormat
 
 			if pre != nil {
 				pre(r, data)
@@ -129,46 +132,45 @@ func handlePage(name, url string, startData webData, pre, post func(r *http.Requ
 	}
 }
 
-func mainPre(rqst *http.Request, data webData) {
-	if rqst.Method != "POST" {
-		return
-	}
-	delete(data, "result")
-	delete(data, "errors")
-	switch rqst.FormValue("form") {
-	case "send":
-		sendMessage(rqst, data)
+func preMain(rqst *http.Request, data webData) {
+	if rqst.Method == "POST" {
+		switch rqst.FormValue("form") {
+		case "send":
+			preSendMessage(rqst, data)
+		case "format":
+			preLogFormat(rqst, data)
+		}
 	}
 }
 
-func sendMessage(rqst *http.Request, data webData) {
-	if rqst.Method != "POST" {
-		data["error"] = "Wrong method: " + rqst.Method
-	} else {
-		log.Debug().Str("name", rqst.FormValue("name")).Msg("Form Name?")
+func preLogFormat(rqst *http.Request, data webData) {
+	logFormat = rqst.FormValue("logFormat")
+	data["logFormat"] = logFormat
+	data["result"] = "Log format now " + logFormat
+}
 
-		var errs = make([]string, 0, 2)
-		var message, target string
-		var rcvr *receiver
-		if target = rqst.FormValue("target"); target == "" {
-			errs = append(errs, "No target specified")
-		} else if rcvr = receivers[target]; rcvr == nil {
-			errs = append(errs, "No such receiver")
-		}
-		if message = rqst.FormValue("message"); message == "" {
-			errs = append(errs, "No message specified")
-		} else if rqst, err := loadRequest(path.Join(messageDir, message)); err != nil {
-			errs = append(errs,
-				fmt.Sprintf("Load request from file %s: %s", message, err))
-		} else if rcvr == nil {
-		} else if err := sendRequest(target, rqst, rcvr.conn); err != nil {
-			errs = append(errs,
-				fmt.Sprintf("Send message to server %s: %s", target, err))
-		}
-		if len(errs) > 0 {
-			data["error"] = "<p>" + strings.Join(errs, "</p><p>") + "</p>"
-		} else {
-			data["result"] = "Message sent"
-		}
+func preSendMessage(rqst *http.Request, data webData) {
+	var errs = make([]string, 0, 2)
+	var msg, tgt string
+	var rcvr *receiver
+	if tgt = rqst.FormValue("target"); tgt == "" {
+		errs = append(errs, "No target specified")
+	} else if rcvr = receivers[tgt]; rcvr == nil {
+		errs = append(errs, "No such receiver")
+	}
+	if msg = rqst.FormValue("message"); msg == "" {
+		errs = append(errs, "No message specified")
+	} else if rqst, err := loadRequest(path.Join(messageDir, msg)); err != nil {
+		errs = append(errs,
+			fmt.Sprintf("Load request from file %s: %s", msg, err))
+	} else if rcvr == nil {
+	} else if err := sendRequest(tgt, rqst, rcvr.conn); err != nil {
+		errs = append(errs,
+			fmt.Sprintf("Send msg to server %s: %s", tgt, err))
+	}
+	if len(errs) > 0 {
+		data["error"] = strings.Join(errs, "<br>")
+	} else {
+		data["result"] = "Message sent"
 	}
 }
