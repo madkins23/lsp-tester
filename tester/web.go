@@ -24,13 +24,13 @@ func webServer(port uint) {
 		waiter.Done()
 	}()
 
+	if err := loadMessageFiles(); err != nil {
+		log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
+	}
+
 	data := webData{
 		"messages":  messages,
 		"receivers": receivers,
-	}
-
-	if err := loadMessageFiles(); err != nil {
-		log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
 	}
 
 	const configurePageError = "Configuring page handler"
@@ -91,9 +91,7 @@ func handleImage(name string) error {
 		return fmt.Errorf("read image file %s: %w", name, err)
 	} else {
 		http.HandleFunc("/image/"+name, func(w http.ResponseWriter, r *http.Request) {
-			log.Debug().Str("URL", r.URL.Path).Msg("Image handler")
 			name := r.URL.Path[7:]
-			log.Debug().Str("Image", name).Msg("Image Name")
 			w.Header().Set("Content-Type", "image/png")
 			if _, err := w.Write(buf); err != nil {
 				log.Error().Err(err).Str("image", name).Msg("Write image to HTTP response")
