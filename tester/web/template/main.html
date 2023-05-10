@@ -12,7 +12,9 @@
             <td><label for="target">Target for message</label></td>
             <td>
                 <select name="target" id="target">
-                    {{range $name, $rcvr := $.receivers}}<option value="{{$name}}">{{$name}}</option>{{end}}
+                    {{range $name, $rcvr := $.receivers}}
+                    <option value="{{$name}}"{{if eq $name $.lastTarget}}selected{{end}}>{{$name}}</option>
+                    {{end}}
                 </select>
             </td>
         </tr>
@@ -20,7 +22,9 @@
             <td><label for="message">Message to send</label></td>
             <td>
                 <select name="message" id="message">
-                    {{range $msg := $.messages}}<option value="{{$msg}}">{{$msg}}</option>{{end}}
+                    {{range $msg := $.messages}}
+                    <option value="{{$msg}}" {{if eq $msg $.lastMessage}}selected{{end}}>{{$msg}}</option>
+                    {{end}}
                 </select>
             </td>
         </tr>

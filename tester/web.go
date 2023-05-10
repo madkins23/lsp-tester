@@ -102,6 +102,11 @@ func handleImage(name string) error {
 	}
 }
 
+var (
+	lastMessage string
+	lastTarget  string
+)
+
 func handlePage(name, url string, startData webData, pre, post func(r *http.Request, data webData)) error {
 	if tmpl, err := template.ParseFS(webPages, "web/template/skeleton.html", "web/template/"+name+".html"); err != nil {
 		return fmt.Errorf("parse template files for %s: %w", name, err)
@@ -111,8 +116,10 @@ func handlePage(name, url string, startData webData, pre, post func(r *http.Requ
 			for key, value := range startData {
 				data[key] = value
 			}
-			data["page"] = name
+			data["lastMessage"] = lastMessage
+			data["lastTarget"] = lastTarget
 			data["logFormat"] = logFormat
+			data["page"] = name
 
 			if pre != nil {
 				pre(r, data)
@@ -156,18 +163,25 @@ func preSendMessage(rqst *http.Request, data webData) {
 		errs = append(errs, "No target specified")
 	} else if rcvr = receivers[tgt]; rcvr == nil {
 		errs = append(errs, "No such receiver")
+	} else {
+		lastTarget = tgt
+		data["lastTarget"] = lastTarget
 	}
 	if msg = rqst.FormValue("message"); msg == "" {
 		errs = append(errs, "No message specified")
 	} else if rqst, err := loadRequest(path.Join(messageDir, msg)); err != nil {
 		errs = append(errs,
 			fmt.Sprintf("Load request from file %s: %s", msg, err))
-	} else if rcvr == nil {
-	} else if err := sendRequest(tgt, rqst, rcvr.conn); err != nil {
-		errs = append(errs,
-			fmt.Sprintf("Send msg to server %s: %s", tgt, err))
+	} else {
+		lastMessage = msg
+		data["lastMessage"] = lastMessage
+		if rcvr != nil {
+			if err = sendRequest(tgt, rqst, rcvr.conn); err != nil {
+				errs = append(errs,
+					fmt.Sprintf("Send msg to server %s: %s", tgt, err))
+			}
+		}
 	}
-	errs = append(errs, "Goober", "Snoofus")
 	if len(errs) > 0 {
 		data["errors"] = errs
 	} else {
