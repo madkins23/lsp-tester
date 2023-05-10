@@ -39,15 +39,6 @@ func webServer(port uint) {
 		log.Error().Err(err).Str("page", "main").Msg(configureError)
 	}
 
-	if err := handlePage("send", "/send", data, nil, nil); err != nil {
-		log.Error().Err(err).Str("page", "send").Msg(configureError)
-	}
-
-	sentData := make(webData)
-	if err := handlePage("sent", "/sent", sentData, sendMessage, nil); err != nil {
-		log.Error().Err(err).Str("page", "sent").Msg(configureError)
-	}
-
 	server := http.Server{
 		Addr: ":" + strconv.Itoa(int(port)),
 	}
@@ -83,13 +74,17 @@ func webServer(port uint) {
 //go:embed web
 var webPages embed.FS
 
-func handlePage(name, url string, data webData, pre, post func(r *http.Request, data webData)) error {
+func handlePage(name, url string, startData webData, pre, post func(r *http.Request, data webData)) error {
 	if page, err := webPages.ReadFile("web/" + name + ".html"); err != nil {
 		return fmt.Errorf("loading web page %s: %w", name, err)
 	} else if tmpl, err := template.New(name).Parse(string(page)); err != nil {
 		return fmt.Errorf("template for web page %s: %w", name, err)
 	} else {
 		http.HandleFunc(url, func(w http.ResponseWriter, r *http.Request) {
+			data := make(webData)
+			for key, value := range startData {
+				data[key] = value
+			}
 			if pre != nil {
 				pre(r, data)
 			}
@@ -108,11 +103,6 @@ func handlePage(name, url string, data webData, pre, post func(r *http.Request, 
 }
 
 func mainPre(rqst *http.Request, data webData) {
-	if rqst.Method == "GET" && rqst.FormValue("form") == "refresh" {
-		delete(data, "result")
-		delete(data, "errors")
-		return
-	}
 	if rqst.Method != "POST" {
 		return
 	}
