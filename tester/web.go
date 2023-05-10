@@ -108,9 +108,16 @@ func handlePage(name, url string, data webData, pre, post func(r *http.Request, 
 }
 
 func mainPre(rqst *http.Request, data webData) {
+	if rqst.Method == "GET" && rqst.FormValue("form") == "refresh" {
+		delete(data, "result")
+		delete(data, "errors")
+		return
+	}
 	if rqst.Method != "POST" {
 		return
 	}
+	delete(data, "result")
+	delete(data, "errors")
 	switch rqst.FormValue("form") {
 	case "send":
 		sendMessage(rqst, data)

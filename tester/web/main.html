@@ -11,6 +11,7 @@
             color :red;
         }
         .text {
+            background-color: white;
             border-color: gray;
             border-width: 2px;
             border-style: inset;
@@ -20,7 +21,7 @@
         }
     </style>
 </head>
-<body>
+<body style="background-color: lightgray">
     <div class="centered">
         <h2>Connections</h2>
         <ul>
@@ -60,6 +61,10 @@
             {{$.error}}
         </div>
         <h2>LSP Server</h2>
+        <form action="/" method="get">
+            <input type="hidden" name="form" value="refresh" />
+            <input type="submit" value="Refresh" style="font-size: 1.5em; font-weight: bolder">
+        </form>
         <form action="/exit" method="post">
             <input type="submit" value="Exit" style="font-size: 1.5em; font-weight: bolder">
         </form>
