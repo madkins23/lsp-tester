@@ -39,10 +39,10 @@
 </form>
 <h2>Result</h2>
 <div class="text">
-    {{$.result}}
+    {{range $index, $line := $.result}}{{$line}}<br>{{end}}
 </div>
 <h2>Errors</h2>
 <div class="text error">
-    {{$.error}}
+    {{range $index, $line := $.errors}}{{$line}}<br>{{end}}
 </div>
 {{end}}

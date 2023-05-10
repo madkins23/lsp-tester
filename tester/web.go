@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"path"
 	"strconv"
-	"strings"
 
 	"github.com/madkins23/go-utils/log"
 )
@@ -146,7 +145,7 @@ func preMain(rqst *http.Request, data webData) {
 func preLogFormat(rqst *http.Request, data webData) {
 	logFormat = rqst.FormValue("logFormat")
 	data["logFormat"] = logFormat
-	data["result"] = "Log format now " + logFormat
+	data["result"] = []string{"Log format now " + logFormat}
 }
 
 func preSendMessage(rqst *http.Request, data webData) {
@@ -168,9 +167,10 @@ func preSendMessage(rqst *http.Request, data webData) {
 		errs = append(errs,
 			fmt.Sprintf("Send msg to server %s: %s", tgt, err))
 	}
+	errs = append(errs, "Goober", "Snoofus")
 	if len(errs) > 0 {
-		data["error"] = strings.Join(errs, "<br>")
+		data["errors"] = errs
 	} else {
-		data["result"] = "Message sent"
+		data["result"] = []string{"Message sent"}
 	}
 }
