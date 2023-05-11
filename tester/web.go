@@ -34,6 +34,10 @@ func webServer(port uint) {
 		"receivers": receivers,
 	}
 
+	if defaultWriter == nil {
+		data["formats"] = []string{"default", "simple"}
+	}
+
 	const configurePageError = "Configuring page handler"
 	const configureImageError = "Configuring image handler"
 
@@ -142,20 +146,36 @@ func preMain(rqst *http.Request, data webData) {
 	if rqst.Method == "POST" {
 		switch rqst.FormValue("form") {
 		case "send":
-			preSendMessage(rqst, data)
+			preSendMessagePost(rqst, data)
 		case "format":
-			preLogFormat(rqst, data)
+			preLogFormatPost(rqst, data)
 		}
 	}
 }
 
-func preLogFormat(rqst *http.Request, data webData) {
+func preLogFormatPost(rqst *http.Request, data webData) {
 	logFormat = rqst.FormValue("logFormat")
+	switch logFormat {
+	case "default":
+		simpleFormat = false
+		if defaultWriter != nil {
+			log.SetLogger(log.Logger().Output(defaultWriter))
+		}
+	case "expanded":
+		simpleFormat = false
+		if expandedWriter == nil {
+			data["errors"] = []string{"Unable to use expanded logging without -console"}
+		} else {
+			log.SetLogger(log.Logger().Output(expandedWriter))
+		}
+	case "simple":
+		simpleFormat = true
+	}
 	data["logFormat"] = logFormat
 	data["result"] = []string{"Log format now " + logFormat}
 }
 
-func preSendMessage(rqst *http.Request, data webData) {
+func preSendMessagePost(rqst *http.Request, data webData) {
 	var errs = make([]string, 0, 2)
 	var msg, tgt string
 	var rcvr *receiver
