@@ -164,6 +164,77 @@ yielding:
 {"level":"debug","&test":"client","!from":"server","!to":"tester","#size":58,"msg":{"jsonrpc":"2.0","method":"$\/alive\/refresh","params":{}},"time":"2023-05-06T17:25:54-07:00","message":"Received"}
 ```
 
+## Web Server
+
+An embedded web server provides some interactive control over `lsp-tester`.
+The following functionality may be invoked while the tester is running:
+* Change the log format.
+* Send messages stored in files to server or client.
+
+### Starting the Web Server
+
+The web server is only started if a `-webPort` flag is specified with a non-zero value:
+```
+lsp-tester -console -clientPort=8006 -serverPort=8007 -webPort=8008
+```
+
+The server will be accessible from a browser at `http://localhost:<webPort>`.
+The main (and currently only) page:
+
+![lsp-tester main web page](./images/webMain.png)
+
+#### Connections
+
+All current connections are displayed.
+There can only be a single `server` connection,
+but there can be multiple numbered `client-#` connections over time
+(and theoretically at the same time).
+
+#### Messaging
+
+Messaging requires a directory of `.json` message files.
+The `-messages` flag specifies the path to this directory:
+```
+lsp-tester -console -clientPort=8006 -serverPort=8007 -webPort=8008 -messages=<dirPath>
+```
+The `-messages` flag is only used when `-webPort` is used to activate the web server.
+Message files are `.json` files with properly configured LSP messages.
+
+On the main web page set the target for the message via the provided drop-down
+which will have an entry for each current connection.
+Use the message drop-down to set the message to be sent.
+The `Send Message` button will send the actual message.
+
+#### Change Log Format
+
+The log format can be changed while `lsp-tester` is running.
+The three radio buttons represent the three log formats as described above  in the **Output** section.
+Select one of the log formats and use the `Change Log Format` message.
+All subsequent messaging will be in the new format unless changed again.
+
+### Output
+
+Output from `lsp-tester` will continue to be via either `stderr` or a file.
+There is currently no provision for seeing the log via the web interface
+which is used only to control `lsp-tester`.
+
+### Usage Scenario
+
+The web interface provides the means to execute complex testing scenarios:
+
+1. Bring up the LSP server with a specified port.
+2. Run `lsp-tester` specifying the LSP server port in `-clientPort` and `--simple`.
+3. Configure the VSCode extension to contact the `lsp-tester` `-serverPort`.
+4. Start the extension or restart it via the **Developer: Reload Window** command.
+5. Wait for the initialization traffic to clear in the `lsp-tester` output stream.
+6. Use the web interface to change the output format to `default` or `expanded`.
+7. Use the web interface to send any desired message to either the extension or the LSP server.
+
+This scenario handles two problems:
+
+1. The initialization traffic between the extension and the LSP server can be large.
+2. It is useful to be able to send messages in both directions once the connection has started.
+
 ## Command Line Flags
 
 | Flag          | Type     | Description                                          |
@@ -177,6 +248,8 @@ yielding:
 | `-logFile`    | `string` | Log file path (default "/tmp/lsp-tester.log")        |
 | `-logJSON`    | `bool`   | Log output to file as JSON objects                   |
 | `-request`    | `string` | Path to requestPath file (client mode)               |
+| `-webPort`    | `uint`   | Port for web server for interactive control          |
+| `-messages`   | `string` | Path to directory of message files (for Web server)  |
 | `-help`       | `bool`   | Show usage and flags                                 |
 
 Boolean (`bool`) flags do not require a value.
