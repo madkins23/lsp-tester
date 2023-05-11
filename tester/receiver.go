@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/madkins23/go-utils/log"
 )
@@ -22,21 +23,32 @@ var (
 )
 
 type receiver struct {
-	connectedTo string
-	conn        net.Conn
-	other       *receiver
+	to    string
+	conn  net.Conn
+	other *receiver
 }
 
-func newReceiver(connectedTo string, connection net.Conn) *receiver {
-	if connectedTo == "client" {
-		connectedTo += "-" + strconv.Itoa(int(sequence.Add(1)))
+func startReceiver(to string, connection net.Conn) (*receiver, error) {
+	if to == "client" {
+		to += "-" + strconv.Itoa(int(sequence.Add(1)))
 	}
 	rcvr := &receiver{
-		connectedTo: connectedTo,
-		conn:        connection,
+		to:   to,
+		conn: connection,
 	}
-	receivers[connectedTo] = rcvr
-	return rcvr
+	receivers[to] = rcvr
+	ready := make(chan bool)
+	go rcvr.receive(&ready)
+	for i := 0; i < 5; i++ {
+		select {
+		case <-ready:
+			log.Debug().Str("to", to).Msg("Connected")
+			return rcvr, nil
+		case <-time.After(time.Second):
+			log.Debug().Str("to", to).Msg("Connecting...")
+		}
+	}
+	return nil, fmt.Errorf("connection to %s not made", to)
 }
 
 func (r *receiver) kill() error {
@@ -44,11 +56,11 @@ func (r *receiver) kill() error {
 }
 
 func (r *receiver) receive(ready *chan bool) {
-	log.Info().Str("connection", r.connectedTo).Msg("Receiver starting")
+	log.Info().Str("to", r.to).Msg("Receiver starting")
 	waiter.Add(1)
 	defer func() {
-		log.Info().Str("connection", r.connectedTo).Msg("Receiver finished")
-		delete(receivers, r.connectedTo)
+		log.Info().Str("to", r.to).Msg("Receiver finished")
+		delete(receivers, r.to)
 		waiter.Done()
 	}()
 
@@ -96,11 +108,12 @@ func (r *receiver) receive(ready *chan bool) {
 		} else if length != contentLen {
 			log.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
-			logMessage(r.connectedTo, "tester", "Rcvd", content[:contentLen])
+			content = content[:contentLen]
+			logMessage(r.to, "tester", "Rcvd", content)
 			// TODO: What if there are multiple clients?
 			// How do we know which one server should send to?
 			if r.other != nil {
-				if err := r.other.sendContent(content[:contentLen]); err != nil {
+				if err := r.other.sendContent(content); err != nil {
 					log.Error().Err(err).Msg("Sending outgoing message")
 				}
 			}
@@ -109,7 +122,7 @@ func (r *receiver) receive(ready *chan bool) {
 }
 
 func (r *receiver) sendContent(content []byte) error {
-	if err := sendContent(r.connectedTo, content, r.conn); err != nil {
+	if err := sendContent(r.to, content, r.conn); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	} else {
 		return nil
