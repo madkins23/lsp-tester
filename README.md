@@ -164,6 +164,8 @@ yielding:
 {"level":"debug","&test":"client","!from":"server","!to":"tester","#size":58,"msg":{"jsonrpc":"2.0","method":"$\/alive\/refresh","params":{}},"time":"2023-05-06T17:25:54-07:00","message":"Received"}
 ```
 
+## Web Server
+
 ## Command Line Flags
 
 | Flag          | Type     | Description                                          |
@@ -177,6 +179,8 @@ yielding:
 | `-logFile`    | `string` | Log file path (default "/tmp/lsp-tester.log")        |
 | `-logJSON`    | `bool`   | Log output to file as JSON objects                   |
 | `-request`    | `string` | Path to requestPath file (client mode)               |
+| `-webPort`    | `uint`   | Port for web server for interactive control          |
+| `-messages`   | `string` | Path to directory of message files (for Web server)  |
 | `-help`       | `bool`   | Show usage and flags                                 |
 
 Boolean (`bool`) flags do not require a value.
