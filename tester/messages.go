@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/madkins23/go-utils/log"
@@ -30,7 +30,7 @@ type message struct {
 // RequestMessage, NotificationMessage, Registration, and Unregistration messages.
 type request struct {
 	message
-	ID              int    `json:"id"`
+	ID              any    `json:"id"`
 	Method          string `json:"method"`
 	Params          any    `json:"params"`
 	RegisterOptions any    `json:"registerOptions"`
@@ -44,7 +44,7 @@ type responseError struct {
 
 type response struct {
 	message
-	ID     int            `json:"id"`
+	ID     any            `json:"id"`
 	Result any            `json:"result"`
 	Error  *responseError `json:"error"`
 }
@@ -100,7 +100,7 @@ func loadRequest(requestPath string) (*request, error) {
 
 func sendRequest(to string, rqst *request, connection net.Conn) error {
 	rqst.JSONRPC = jsonRpcVersion
-	rqst.ID = rand.Intn(idRandomRange)
+	rqst.ID = strconv.Itoa(rand.Intn(idRandomRange))
 
 	if params, ok := rqst.Params.(genericData); ok {
 		if path, found := params["path"]; found {
@@ -131,8 +131,8 @@ func sendContent(to string, content []byte, connection net.Conn) error {
 }
 
 var (
-	methodByID = make(map[int]string)
-	paramsByID = make(map[int]any)
+	methodByID = make(map[any]string)
+	paramsByID = make(map[any]any)
 )
 
 func logMessage(from, to, msg string, content []byte) {
@@ -174,12 +174,7 @@ func logMessage(from, to, msg string, content []byte) {
 	event.RawJSON("msg", content).Msg(msg)
 }
 
-const (
-	maxStringDisplayLen = 32
-	maxHashDisplayLen   = 64
-)
-
-var errUnknownMessageType = errors.New("Unknown Message Type")
+const maxDisplayLen = 32
 
 func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event, msg string) error {
 	msgType := "unknown"
@@ -189,9 +184,9 @@ func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event,
 			return fmt.Errorf("unmarshal request: %w", err)
 		}
 		msgType = "notification"
-		if rqst.ID > 0 {
+		if rqst.ID != "" {
 			msgType = "request"
-			event.Int("%ID", rqst.ID)
+			event.Any("%ID", rqst.ID)
 		}
 		if rqst.Method != "" {
 			event.Str("%method", rqst.Method)
@@ -211,8 +206,8 @@ func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event,
 		if err := json.Unmarshal(content, &resp); err != nil {
 			return fmt.Errorf("unmarshal response: %w", err)
 		}
-		if resp.ID > 0 {
-			event.Int("%ID", resp.ID)
+		if resp.ID != "" {
+			event.Any("%ID", resp.ID)
 			if method, found := methodByID[resp.ID]; found {
 				event.Str("%rqst-method", method)
 			}
@@ -231,10 +226,11 @@ func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event,
 				addToEventWithLog("error-data", resp.Error.Data, event)
 			}
 		}
-		addToEventWithLog("result", resp.Result, event)
+		if resp.Result != nil {
+			addToEventWithLog("result", resp.Result, event)
+		}
 	}
 	if msgType == "unknown" {
-		event.Err(errUnknownMessageType)
 		if str, err := marshalAny(data); err != nil {
 			return fmt.Errorf("marshalAny: %w", err)
 		} else {
@@ -258,10 +254,14 @@ func addToEventWithLog(key string, item any, event *zerolog.Event) {
 func addToEvent(key string, item any, event *zerolog.Event) (bool, error) {
 	added := true
 	if text, ok := item.(string); ok {
-		if len(text) > maxStringDisplayLen {
-			text = text[:maxStringDisplayLen]
+		if len(text) > maxDisplayLen {
+			text = text[:maxDisplayLen]
 		}
-		event.Str(key, text)
+		if text == "" {
+			return false, nil
+		} else {
+			event.Str(key, text)
+		}
 	} else if number, ok := item.(float64); ok {
 		event.Float64(key, number)
 	} else if boolean, ok := item.(bool); ok {
@@ -293,8 +293,8 @@ func marshalAny(item any) (string, error) {
 	if jsonBytes, err := json.Marshal(item); err != nil {
 		return "", fmt.Errorf("marshal JSON: %w", err)
 	} else {
-		if len(jsonBytes) > maxHashDisplayLen {
-			jsonBytes = append(jsonBytes[:maxHashDisplayLen], []byte("...")...)
+		if len(jsonBytes) > maxDisplayLen {
+			jsonBytes = append(jsonBytes[:maxDisplayLen], []byte("...")...)
 		}
 		return string(jsonBytes), nil
 	}
