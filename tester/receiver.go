@@ -43,7 +43,7 @@ func (r *receiver) kill() error {
 	return r.conn.Close()
 }
 
-func (r *receiver) receive() {
+func (r *receiver) receive(ready *chan bool) {
 	log.Info().Str("connection", r.connectedTo).Msg("Receiver starting")
 	waiter.Add(1)
 	defer func() {
@@ -54,6 +54,9 @@ func (r *receiver) receive() {
 
 	content := make([]byte, 1048576) // 1 Mb
 	reader := bufio.NewReader(r.conn)
+
+	// Notify caller receiver is about to do its thing.
+	*ready <- true
 
 	for {
 		var contentLen = 0
@@ -94,6 +97,8 @@ func (r *receiver) receive() {
 			log.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
 			logMessage(r.connectedTo, "tester", "Rcvd", content[:contentLen])
+			// TODO: What if there are multiple clients?
+			// How do we know which one server should send to?
 			if r.other != nil {
 				if err := r.other.sendContent(content[:contentLen]); err != nil {
 					log.Error().Err(err).Msg("Sending outgoing message")

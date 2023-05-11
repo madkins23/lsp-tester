@@ -104,8 +104,10 @@ func main() {
 			return
 		}
 
-		client = newReceiver("server", connection)
-		go client.receive()
+		if client, err = startReceiver("server", connection); err != nil {
+			log.Error().Err(err).Msg("Unable to start receiver")
+			return
+		}
 
 		if requestPath != "" {
 			if rqst, err := loadRequest(requestPath); err != nil {
@@ -123,13 +125,15 @@ func main() {
 		} else {
 			go listenForClient(serverPort, listener, func(conn net.Conn) {
 				log.Info().Msg("Accepting client connectedTo")
-				server = newReceiver("client", conn)
+				if server, err = startReceiver("client", conn); err != nil {
+					log.Error().Err(err).Msg("Unable to start receiver")
+					return
+				}
 				if client != nil {
 					log.Info().Msg("Configuring pass-through operation")
 					client.other = server
 					server.other = client
 				}
-				go server.receive()
 			})
 		}
 	}
@@ -142,6 +146,23 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	waiter.Wait()
+}
+
+func startReceiver(name string, connection net.Conn) (*receiver, error) {
+	connectionLog := log.Logger().With().Str("to", name).Logger()
+	rcvr := newReceiver("server", connection)
+	ready := make(chan bool)
+	go rcvr.receive(&ready)
+	for i := 0; i < 5; i++ {
+		select {
+		case <-ready:
+			connectionLog.Debug().Msg("Connected")
+			return rcvr, nil
+		case <-time.After(time.Second):
+			connectionLog.Debug().Msg("Connecting...")
+		}
+	}
+	return nil, fmt.Errorf("connection to %s not made", name)
 }
 
 func connectToLSP(host string, port uint) (net.Conn, error) {
