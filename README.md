@@ -71,6 +71,8 @@ Output can be directed to the console or a file.
 
 ### Console Output
 
+#### Default Format
+
 Console output provides a line per message by default.
 
 For example:
@@ -85,6 +87,8 @@ might result in the following:
 16:13:30 INF Rcvd !=tester<--server #size=47 msg={"id":81,"jsonrpc":"2.0","result":{"text":"5"}}
 16:13:30 INF Rcvd !=tester<--server #size=58 msg={"jsonrpc":"2.0","method":"$/alive/refresh","params":{}}
 ```
+
+#### Expanded Format
 
 The JSON content of the `msg` field can also be expanded using:
 ```shell
@@ -126,6 +130,8 @@ so that the previous log data would show as:
 }
 ```
 
+#### Simple Format
+
 On the other hand, large amounts of data can sometimes be generated
 (especially during initialization) so there is a log simplification mode:
 ```shell
@@ -133,13 +139,42 @@ lsp-tester -console -simple -clientPort=8006 -request=<file path>
 ```
 in which the previous log data would show as:
 ```
-16:11:11 INF LSP starting
-16:11:11 INF Send !=tester-->server #size=123 $ID=81 method=$/alive/eval params="(+ 2 (/ 15 5))" source=file
-16:11:11 INF Rcvd !=tester<--server #size=58 method=$/alive/refresh
-16:11:11 INF Rcvd !=tester<--server #size=47 $ID=81 from-method=$/alive/eval method-params="(+ 2 (/ 15 5))" result=5
-16:11:11 INF Rcvd !=tester<--server #size=58 method=$/alive/refresh
+07:30:48 INF LSP starting
+07:30:48 INF Receiver starting to=server
+07:30:48 DBG Connected to=server
+07:30:48 INF Send !=tester-->server #size=125 $Type=request %ID=81 %method=$/alive/eval <package=cl-user <storeResult=true <text="(+ 2 (/ 15 5))"
+07:30:48 INF Rcvd !=tester<--server #size=58 $Type=notification %method=$/alive/refresh
+07:30:48 INF Rcvd !=tester<--server #size=49 $Type=response %ID=81 <>method=$/alive/eval <>package=cl-user <>storeResult=true <>text="(+ 2 (/ 15 5))" >text=5
+07:30:48 INF Rcvd !=tester<--server #size=58 $Type=notification %method=$/alive/refresh
 ```
-This mode attempts to pull out key fields and only show small blocks of data.
+This mode attempts to pull out key fields and only show small blocks of meaningful data.
+Specific conventions used in this format:
+
+| Example             | Definition                                      |
+|---------------------|-------------------------------------------------|
+| `!=tester-->server` | Direction of message [^1]                       |
+| `#size=125`         | Size of content from message header             |
+| `$Type=request`     | Type of message [^2]                            |
+| `%ID=81`            | Message ID                                      |
+| `%method=$/alive/eval` | Method for request                              |
+| `<text="(+ 2 (/ 15 5))` | Parameter with name prefixed by `<`             |
+| `>text=5` | Result item with name prefixed by '>'           |
+| `<>method=$/alive/eval` | Method from request provided with response [^3] |
+| `<>text="(+ 2 (/ 15 5))"` | Parameter from request provided with response [^3]   |                                 
+
+Notes:
+
+[^1]: In Nexus mode there will be two log items for each message.
+The first will be from the client or server to the tester,
+the second will be from the tester to the server or client as appropriate
+
+[^2]: The `$Type` of message is derived from the available fields.
+There is no specific "type" field in the Language Server Protocol.
+
+[^3]: Method and parameter data  from requests is stored by ID,
+looked up when a response message is found with the same ID, and
+added to the log entry for the response using the `<>` prefix.
+This data is not actually in the response message.
 
 ### File Output
 
