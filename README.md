@@ -150,17 +150,17 @@ in which the previous log data would show as:
 This mode attempts to pull out key fields and only show small blocks of meaningful data.
 Specific conventions used in this format:
 
-| Example             | Definition                                      |
-|---------------------|-------------------------------------------------|
-| `!=tester-->server` | Direction of message [^1]                       |
-| `#size=125`         | Size of content from message header             |
-| `$Type=request`     | Type of message [^2]                            |
-| `%ID=81`            | Message ID                                      |
-| `%method=$/alive/eval` | Method for request                              |
-| `<text="(+ 2 (/ 15 5))` | Parameter with name prefixed by `<`             |
-| `>text=5` | Result item with name prefixed by '>'           |
+| Example             | Definition                                     |
+|---------------------|------------------------------------------------|
+| `!=tester-->server` | Direction of message [^1]                      |
+| `#size=125`         | Size of content from message header            |
+| `$Type=request`     | Type of message [^2]                           |
+| `%ID=81`            | Message ID                                     |
+| `%method=$/alive/eval` | Method for request                             |
+| `<text="(+ 2 (/ 15 5))` | Parameter with name prefixed by `<`            |
+| `>text=5` | Result item with name prefixed by `>`           |
 | `<>method=$/alive/eval` | Method from request provided with response [^3] |
-| `<>text="(+ 2 (/ 15 5))"` | Parameter from request provided with response [^3]   |                                 
+| `<>text="(+ 2 (/ 15 5))"` | Parameter from request provided with response [^3] |                                 
 
 Notes:
 
