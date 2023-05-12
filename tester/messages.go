@@ -166,31 +166,32 @@ func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event,
 			methodByID[id] = method
 		}
 		if params, found := data.getField("params"); found {
-			addToEventWithLog("params", params, event)
+			addDataToEvent("<", params, event)
 			if idFound {
 				paramsByID[id] = params
 			}
 		}
-		if options, found := data.getField("registerOptions"); found {
-			msgType = "registration"
-			addToEventWithLog("options", options, event)
-		}
-
 	} else if result, found := data.getField("result"); found {
 		msgType = "response"
-		addToEventWithLog("result", result, event)
+		addDataToEvent(">", result, event)
 		id, idFound := data.getField("id")
 		if idFound {
 			event.Any("%ID", id)
 			if method, found := methodByID[id]; found {
-				event.Str("%rqst-method", method)
+				if method == "$/alive/listPackages" {
+					addDataToEvent(">", result, event)
+				}
+				event.Str("<>method", method)
 			}
 			if params, found := paramsByID[id]; found {
-				addToEventWithLog("%rqst-params", params, event)
+				addDataToEvent("<>", params, event)
 			}
 		}
 		if errAny, found := data.getField("error"); found && errAny != nil {
 			addErrorToEvent(errAny, event)
+		}
+		if position, found := data.getField("position"); found {
+			addToEventWithLog("position", position, event)
 		}
 	} else {
 		msgType = "unknown"
@@ -203,6 +204,24 @@ func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event,
 	event.Str("$Type", msgType)
 	event.Msg(msg)
 	return nil
+}
+
+func addDataToEvent(prefix string, data any, event *zerolog.Event) {
+	if hash, ok := data.(map[string]interface{}); ok {
+		for key, item := range hash {
+			addToEventWithLog(prefix+key, item, event)
+		}
+	} else if array, ok := data.([]any); ok {
+		label := "rqst-params"
+		if prefix == "<" {
+			label = "params"
+		} else if prefix == ">" {
+			label = "result"
+		}
+		addToEventWithLog(label, array, event)
+	} else if data != nil {
+		log.Warn().Msg("Params not a map")
+	}
 }
 
 func addErrorToEvent(errAny any, event *zerolog.Event) {
@@ -249,6 +268,7 @@ func addToEvent(key string, item any, event *zerolog.Event) (bool, error) {
 	} else if boolean, ok := item.(bool); ok {
 		event.Bool(key, boolean)
 	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
+		// TODO: Should this now dump every key?
 		for _, attempt := range []string{key, "text", "path", "value", "data"} {
 			if something, found := hash[attempt]; found {
 				if done, err := addToEvent(key, something, event); err != nil {
@@ -259,6 +279,16 @@ func addToEvent(key string, item any, event *zerolog.Event) (bool, error) {
 			}
 		}
 		added = false
+	} else if array, ok := item.([]any); ok && len(array) > 0 {
+		event.Int(key+"#", len(array))
+		for _, element := range array {
+			if done, err := addToEvent(key+"[0]", element, event); err != nil {
+				return false, fmt.Errorf("addToEvent: %w", err)
+			} else if done {
+				// Only shows first item in array.
+				return true, nil
+			}
+		}
 	}
 	if !added {
 		if str, err := marshalAny(item); err != nil {

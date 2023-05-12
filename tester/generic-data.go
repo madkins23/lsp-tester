@@ -2,6 +2,14 @@ package main
 
 type genericData map[string]any
 
+func makeGeneric(data map[string]interface{}) *genericData {
+	result := &genericData{}
+	for key, value := range data {
+		(*result)[key] = value.(any)
+	}
+	return result
+}
+
 func (gd genericData) hasField(name string) bool {
 	_, found := gd[name]
 	return found
