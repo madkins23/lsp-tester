@@ -15,40 +15,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type genericData map[string]any
-
-func (gd genericData) hasField(name string) bool {
-	_, found := gd[name]
-	return found
-}
-
-type message struct {
-	JSONRPC string `json:"jsonrpc"`
-}
-
-// request represents the
-// RequestMessage, NotificationMessage, Registration, and Unregistration messages.
-type request struct {
-	message
-	ID              any    `json:"id"`
-	Method          string `json:"method"`
-	Params          any    `json:"params"`
-	RegisterOptions any    `json:"registerOptions"`
-}
-
-type responseError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    any    `json:"data"`
-}
-
-type response struct {
-	message
-	ID     any            `json:"id"`
-	Result any            `json:"result"`
-	Error  *responseError `json:"error"`
-}
-
 func formatMessageJSON(m map[string]interface{}, buffer *bytes.Buffer) error {
 	if msg, found := m["msg"]; found {
 		if pretty, err := json.MarshalIndent(msg, "", "  "); err != nil {
@@ -85,24 +51,24 @@ func loadMessageFiles() error {
 	return nil
 }
 
-func loadRequest(requestPath string) (*request, error) {
+func loadRequest(requestPath string) (genericData, error) {
 	var err error
 	var content []byte
-	rqst := &request{}
+	var rqst genericData
 	if content, err = os.ReadFile(requestPath); err != nil {
 		return nil, fmt.Errorf("read request %s: %w", requestPath, err)
 	}
-	if err = json.Unmarshal(content, rqst); err != nil {
+	if err = json.Unmarshal(content, &rqst); err != nil {
 		return nil, fmt.Errorf("unmarshal request: %w", err)
 	}
 	return rqst, nil
 }
 
-func sendRequest(to string, rqst *request, connection net.Conn) error {
-	rqst.JSONRPC = jsonRpcVersion
-	rqst.ID = strconv.Itoa(rand.Intn(idRandomRange))
+func sendRequest(to string, rqst genericData, connection net.Conn) error {
+	rqst["jsonrpc"] = jsonRpcVersion
+	rqst["id"] = strconv.Itoa(rand.Intn(idRandomRange))
 
-	if params, ok := rqst.Params.(genericData); ok {
+	if params, ok := rqst["params"].(genericData); ok {
 		if path, found := params["path"]; found {
 			if relPath, ok := path.(string); ok {
 				if absPath, err := filepath.Abs(relPath); err == nil {
@@ -177,70 +143,74 @@ func logMessage(from, to, msg string, content []byte) {
 const maxDisplayLen = 32
 
 func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event, msg string) error {
-	msgType := "unknown"
-	if data.hasField("method") {
-		var rqst request
-		if err := json.Unmarshal(content, &rqst); err != nil {
-			return fmt.Errorf("unmarshal request: %w", err)
-		}
+	var msgType string
+	if method, found := data.getStringField("method"); found {
+		event.Str("%method", method)
 		msgType = "notification"
-		if rqst.ID != "" {
+		id, idFound := data.getField("id")
+		if idFound {
 			msgType = "request"
-			event.Any("%ID", rqst.ID)
+			event.Any("%ID", id)
+			methodByID[id] = method
 		}
-		if rqst.Method != "" {
-			event.Str("%method", rqst.Method)
-			methodByID[rqst.ID] = rqst.Method
+		if params, found := data.getField("params"); found {
+			addToEventWithLog("params", params, event)
+			if idFound {
+				paramsByID[id] = params
+			}
 		}
-		if rqst.Params != nil {
-			addToEventWithLog("params", rqst.Params, event)
-			paramsByID[rqst.ID] = rqst.Params
-		}
-		if rqst.RegisterOptions != nil {
+		if options, found := data.getField("registerOptions"); found {
 			msgType = "registration"
-			addToEventWithLog("options", rqst.RegisterOptions, event)
+			addToEventWithLog("options", options, event)
 		}
-	} else if data.hasField("result") {
-		var resp response
+
+	} else if result, found := data.getField("result"); found {
 		msgType = "response"
-		if err := json.Unmarshal(content, &resp); err != nil {
-			return fmt.Errorf("unmarshal response: %w", err)
-		}
-		if resp.ID != "" {
-			event.Any("%ID", resp.ID)
-			if method, found := methodByID[resp.ID]; found {
+		addToEventWithLog("result", result, event)
+		id, idFound := data.getField("id")
+		if idFound {
+			event.Any("%ID", id)
+			if method, found := methodByID[id]; found {
 				event.Str("%rqst-method", method)
 			}
-			if params, found := paramsByID[resp.ID]; found {
+			if params, found := paramsByID[id]; found {
 				addToEventWithLog("%rqst-params", params, event)
 			}
 		}
-		if resp.Error != nil {
-			if resp.Error.Code > 0 {
-				addToEventWithLog("error-code", resp.Error.Code, event)
-			}
-			if resp.Error.Message != "" {
-				addToEventWithLog("error-msg", resp.Error.Message, event)
-			}
-			if resp.Error.Data != nil {
-				addToEventWithLog("error-data", resp.Error.Data, event)
-			}
+		if errAny, found := data.getField("error"); found && errAny != nil {
+			addErrorToEvent(errAny, event)
 		}
-		if resp.Result != nil {
-			addToEventWithLog("result", resp.Result, event)
-		}
-	}
-	if msgType == "unknown" {
+	} else {
+		msgType = "unknown"
 		if str, err := marshalAny(data); err != nil {
 			return fmt.Errorf("marshalAny: %w", err)
 		} else {
 			event.Str("msg", str)
 		}
-	} else {
-		event.Str("$Type", msgType)
 	}
+	event.Str("$Type", msgType)
 	event.Msg(msg)
 	return nil
+}
+
+func addErrorToEvent(errAny any, event *zerolog.Event) {
+	if errAny == nil {
+		return
+	} else if errHash, ok := errAny.(map[string]interface{}); ok {
+		if code, found := errHash["code"]; found {
+			if codeInt, ok := code.(int); ok {
+				event.Int("err-codeInt", codeInt)
+			}
+		}
+		if msg, found := errHash["message"]; found {
+			if message, ok := msg.(string); ok {
+				event.Str("err-msg", message)
+			}
+		}
+		if data, found := errHash["data"]; found {
+			addToEventWithLog("err-data", data, event)
+		}
+	}
 }
 
 func addToEventWithLog(key string, item any, event *zerolog.Event) {
