@@ -189,14 +189,14 @@ func preSendMessagePost(rqst *http.Request, data webData) {
 	}
 	if msg = rqst.FormValue("message"); msg == "" {
 		errs = append(errs, "No message specified")
-	} else if rqst, err := loadRequest(path.Join(messageDir, msg)); err != nil {
+	} else if rqst, err := loadMessage(path.Join(messageDir, msg)); err != nil {
 		errs = append(errs,
 			fmt.Sprintf("Load request from file %s: %s", msg, err))
 	} else {
 		lastMessage = msg
 		data["lastMessage"] = lastMessage
 		if rcvr != nil {
-			if err = sendRequest(tgt, rqst, rcvr.conn); err != nil {
+			if err = sendMessage(tgt, rqst, rcvr.conn); err != nil {
 				errs = append(errs,
 					fmt.Sprintf("Send msg to server %s: %s", tgt, err))
 			}

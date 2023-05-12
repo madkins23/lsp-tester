@@ -110,9 +110,9 @@ func main() {
 		}
 
 		if requestPath != "" {
-			if rqst, err := loadRequest(requestPath); err != nil {
+			if rqst, err := loadMessage(requestPath); err != nil {
 				log.Error().Err(err).Msgf("Load request from file %s", requestPath)
-			} else if err := sendRequest("server", rqst, connection); err != nil {
+			} else if err := sendMessage("server", rqst, connection); err != nil {
 				log.Error().Err(err).Msgf("Send message from file %s", requestPath)
 			}
 		}

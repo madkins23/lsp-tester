@@ -15,6 +15,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// formatMessageJSON is a FormatExtra function for zerolog.ConsoleWriter.
+// When used it formats the "msg" field as JSON on the lines after the log entry.
 func formatMessageJSON(m map[string]interface{}, buffer *bytes.Buffer) error {
 	if msg, found := m["msg"]; found {
 		if pretty, err := json.MarshalIndent(msg, "", "  "); err != nil {
@@ -34,6 +36,9 @@ const (
 	jsonRpcVersion  = "2.0"
 )
 
+// loadMessageFiles loads all message files in the message directory.
+// The message directory is specified by the messageDir global variable.
+// The message file data is stored in the messages global variable as strings.
 func loadMessageFiles() error {
 	if messageDir == "" {
 		// Nothing to do here
@@ -51,7 +56,9 @@ func loadMessageFiles() error {
 	return nil
 }
 
-func loadRequest(requestPath string) (genericData, error) {
+// loadMessage loads the file at the specified path, unmarshals the JSON content,
+// and returns a genericData object.
+func loadMessage(requestPath string) (genericData, error) {
 	var err error
 	var content []byte
 	var rqst genericData
@@ -64,11 +71,14 @@ func loadRequest(requestPath string) (genericData, error) {
 	return rqst, nil
 }
 
-func sendRequest(to string, rqst genericData, connection net.Conn) error {
-	rqst["jsonrpc"] = jsonRpcVersion
-	rqst["id"] = strconv.Itoa(rand.Intn(idRandomRange))
+// sendMessage marshals a genericData object and sends it to the specified connection.
+// The data object is edited to contain a JSON RPC version, a request ID,
+// and contained relative path fields are replaced with absolute paths.
+func sendMessage(to string, message genericData, connection net.Conn) error {
+	message["jsonrpc"] = jsonRpcVersion
+	message["id"] = strconv.Itoa(rand.Intn(idRandomRange))
 
-	if params, ok := rqst["params"].(genericData); ok {
+	if params, ok := message["params"].(genericData); ok {
 		if path, found := params["path"]; found {
 			if relPath, ok := path.(string); ok {
 				if absPath, err := filepath.Abs(relPath); err == nil {
@@ -78,7 +88,7 @@ func sendRequest(to string, rqst genericData, connection net.Conn) error {
 		}
 	}
 
-	if content, err := json.Marshal(rqst); err != nil {
+	if content, err := json.Marshal(message); err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	} else if err := sendContent(to, content, connection); err != nil {
 		return fmt.Errorf("send content: %w", err)
@@ -86,6 +96,8 @@ func sendRequest(to string, rqst genericData, connection net.Conn) error {
 	return nil
 }
 
+// sendContent sends byte array content to the specified connection.
+// A message header is provided before the content.
 func sendContent(to string, content []byte, connection net.Conn) error {
 	logMessage("tester", to, "Send", content)
 	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
