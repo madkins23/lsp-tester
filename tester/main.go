@@ -58,10 +58,6 @@ func main() {
 	logConfig.AddFlagsToSet(flags, path.Join(os.TempDir(), "/lsp-tester.log"))
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
-		if !errors.Is(err, flag.ErrHelp) {
-			fmt.Printf("Error parsing command line flags: %s.", err)
-			flags.Usage()
-		}
 		return
 	}
 
