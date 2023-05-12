@@ -47,8 +47,8 @@ func main() {
 	flags := flag.NewFlagSet("lsp-tester", flag.ContinueOnError)
 	flags.StringVar(&hostAddress, "host", "127.0.0.1", "Host address")
 	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
-	flags.UintVar(&clientPort, "clientPort", 0, "Port number for contacting LSP as client")
-	flags.UintVar(&serverPort, "serverPort", 0, "Port number served for extension to contact")
+	flags.UintVar(&clientPort, "clientPort", 0, "Port number served for extension to contact")
+	flags.UintVar(&serverPort, "serverPort", 0, "Port number on which to contact LSP server")
 	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log")
 	flags.BoolVar(&simpleFormat, "simple", false, "Simple message format")
 	flags.UintVar(&webPort, "webPort", 0, "Web port number to enable web access")
@@ -93,10 +93,10 @@ func main() {
 	var client *receiver
 	var server *receiver
 
-	if clientPort > 0 {
-		connection, err := connectToLSP(hostAddress, clientPort)
+	if serverPort > 0 {
+		connection, err := connectToLSP(hostAddress, serverPort)
 		if err != nil {
-			log.Error().Err(err).Msgf("Connect to LSP at %s:%d", hostAddress, clientPort)
+			log.Error().Err(err).Msgf("Connect to LSP at %s:%d", hostAddress, serverPort)
 			return
 		}
 
@@ -114,12 +114,12 @@ func main() {
 		}
 	}
 
-	if serverPort > 0 {
+	if clientPort > 0 {
 		var err error
-		if listener, err = net.Listen("tcp", fmt.Sprintf(":%d", serverPort)); err != nil {
-			log.Error().Err(err).Msgf("Make listener on %d", serverPort)
+		if listener, err = net.Listen("tcp", fmt.Sprintf(":%d", clientPort)); err != nil {
+			log.Error().Err(err).Msgf("Make listener on %d", clientPort)
 		} else {
-			go listenForClient(serverPort, listener, func(conn net.Conn) {
+			go listenForClient(clientPort, listener, func(conn net.Conn) {
 				log.Info().Msg("Accepting client")
 				if server, err = startReceiver("client", conn); err != nil {
 					log.Error().Err(err).Msg("Unable to start receiver")

@@ -32,7 +32,7 @@ All traffic between `lsp-tester` and the LSP server is logged.
 
 Example:
 ```shell
-lsp-tester -clientPort=8006 -request=<file path>
+lsp-tester -serverPort=8006 -request=<file path>
 ```
 This is a nice way to test single requests without using VSCode.
 
@@ -59,7 +59,7 @@ passing LSP messages back and forth and logging them.
 
 Example:
 ```shell
-lsp-tester -clientPort=8006 -serverPort=8007
+lsp-tester -serverPort=8006 -clientPort=8007
 ```
 
 This is potentially very useful for debugging or testing
@@ -77,7 +77,7 @@ Console output provides a line per message by default.
 
 For example:
 ```shell
-lsp-tester -console -clientPort=8006 -request=<file path>
+lsp-tester -console -serverPort=8006 -request=<file path>
 ```
 might result in the following:
 ```
@@ -92,7 +92,7 @@ might result in the following:
 
 The JSON content of the `msg` field can also be expanded using:
 ```shell
-lsp-tester -console -expand -clientPort=8006 -request=<file path>
+lsp-tester -console -expand -serverPort=8006 -request=<file path>
 ```
 so that the previous log data would show as:
 ```
@@ -135,7 +135,7 @@ so that the previous log data would show as:
 On the other hand, large amounts of data can sometimes be generated
 (especially during initialization) so there is a log simplification mode:
 ```shell
-lsp-tester -console -simple -clientPort=8006 -request=<file path>
+lsp-tester -console -simple -serverPort=8006 -request=<file path>
 ```
 in which the previous log data would show as:
 ```
@@ -183,12 +183,12 @@ format described above.
 File output is set by _not_ using the `-console` flag.
 The default filename is `/tmp/lsp-tester.log` but can be overridden:
 ```shell
-lsp-tester -clientPort=8006 -serverPort=8007 -logFile=<path>
+lsp-tester -serverPort=8006 -clientPort=8007 -logFile=<path>
 ```
 
 File contents can also be dumped as JSON records:
 ```shell
-lsp-tester -clientPort=8006 -serverPort=8007 -logFile=<path> -logJSON
+lsp-tester -serverPort=8006 -clientPort=8007 -logFile=<path> -logJSON
 ```
 yielding:
 ```
@@ -210,7 +210,7 @@ The following functionality may be invoked while the tester is running:
 
 The web server is only started if a `-webPort` flag is specified with a non-zero value:
 ```
-lsp-tester -console -clientPort=8006 -serverPort=8007 -webPort=8008
+lsp-tester -console -serverPort=8006 -clientPort=8007 -webPort=8008
 ```
 
 The server will be accessible from a browser at `http://localhost:<webPort>`.
@@ -230,7 +230,7 @@ but there can be multiple numbered `client-#` connections over time
 Messaging requires a directory of `.json` message files.
 The `-messages` flag specifies the path to this directory:
 ```
-lsp-tester -console -clientPort=8006 -serverPort=8007 -webPort=8008 -messages=<dirPath>
+lsp-tester -console -serverPort=8006 -clientPort=8007 -webPort=8008 -messages=<dirPath>
 ```
 The `-messages` flag is only used when `-webPort` is used to activate the web server.
 Message files are `.json` files with properly configured LSP messages.
@@ -258,8 +258,8 @@ which is used only to control `lsp-tester`.
 The web interface provides the means to execute complex testing scenarios:
 
 1. Bring up the LSP server with a specified port.
-2. Run `lsp-tester` specifying the LSP server port in `-clientPort` and `--simple`.
-3. Configure the VSCode extension to contact the `lsp-tester` `-serverPort`.
+2. Run `lsp-tester` specifying the LSP server port in `-serverPort` and `--simple`.
+3. Configure the VSCode extension to contact the `lsp-tester` `-clientPort`.
 4. Start the extension or restart it via the **Developer: Reload Window** command.
 5. Wait for the initialization traffic to clear in the `lsp-tester` output stream.
 6. Use the web interface to change the output format to `default` or `expanded`.
@@ -274,8 +274,8 @@ This scenario handles two problems:
 
 | Flag          | Type     | Description                                          |
 |---------------|----------|------------------------------------------------------|
-| `-clientPort` | `uint`   | Client port number                                   |
-| `-serverPort` | `uint`   | Server port number                                   |
+| `-clientPort` | `uint`   | Port number served for extension to contact          |
+| `-serverPort` | `uint`   | Port number on which to contact LSP server           |
 | `-console`    | `bool`   | Log to the console instead of the specified log file |
 | `-expand`     | `bool`   | Expand message JSON in log if true                   |
 | `-simple`     | `bool`   | Show simplified console log entries                  |
