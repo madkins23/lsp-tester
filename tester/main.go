@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,14 +17,16 @@ import (
 )
 
 var (
-	simpleFormat bool
-	messageDir   string
+	messageDir string
 )
 
 var (
 	defaultWriter  *zerolog.ConsoleWriter
 	expandedWriter *zerolog.ConsoleWriter
-	logFormat      = "default"
+	stdFormat      = "default"
+	fileFormat     = "default"
+	logFilePath    string
+	fileAppend     = false
 )
 
 var (
@@ -40,52 +43,57 @@ func main() {
 		clientPort  uint
 		serverPort  uint
 		requestPath string
-		expandJSON  bool
 		webPort     uint
 	)
 
 	flags := flag.NewFlagSet("lsp-tester", flag.ContinueOnError)
 	flags.StringVar(&hostAddress, "host", "127.0.0.1", "Host address")
-	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
 	flags.UintVar(&clientPort, "clientPort", 0, "Port number served for extension to contact")
 	flags.UintVar(&serverPort, "serverPort", 0, "Port number on which to contact LSP server")
-	flags.BoolVar(&expandJSON, "expand", false, "Expand message JSON in log")
-	flags.BoolVar(&simpleFormat, "simple", false, "Simple message format")
 	flags.UintVar(&webPort, "webPort", 0, "Web port number to enable web access")
 	flags.StringVar(&messageDir, "messages", "", "Path to directory of message files")
-
-	logConfig := log.ConsoleOrFile{}
-	logConfig.AddFlagsToSet(flags, path.Join(os.TempDir(), "/lsp-tester.log"))
+	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
+	flags.StringVar(&stdFormat, "logFormat", fmtDefault, "Console output format")
+	flags.StringVar(&logFilePath, "logFile", "", "Log file path")
+	flags.BoolVar(&fileAppend, "fileAppend", false, "Append to any pre-existing log file")
+	flags.StringVar(&fileFormat, "fileFormat", fmtDefault, "Log file format")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return
 	}
 
-	if expandJSON && simpleFormat {
-		fmt.Println("Flags -expand and -simple are mutually exclusive.")
-		flags.Usage()
-	} else if simpleFormat {
-		logFormat = "simple"
-	}
-
-	if err := logConfig.Setup(); err != nil {
-		fmt.Printf("Log file creation error: %s.", err)
-		return
-	}
-	defer logConfig.CloseForDefer()
-
-	if writer := logConfig.Writer(); writer != nil {
-		// Setup variants of ConsoleWriter so that the logger con be change at runtime.
-		defaultWriter = logConfig.Writer()
-		expanded := *defaultWriter
-		expanded.FieldsExclude = []string{"msg"}
-		expanded.FormatExtra = formatMessageJSON
-		expandedWriter = &expanded
-		if expandJSON {
-			log.SetLogger(log.Logger().Output(expandedWriter))
-			logFormat = "expanded"
+	if messageDir != "" {
+		if strings.HasPrefix(messageDir, "~/") {
+			dirname, _ := os.UserHomeDir()
+			messageDir = filepath.Join(dirname, messageDir[2:])
+		}
+		if stat, err := os.Stat(messageDir); err != nil {
+			log.Error().Str("-messages", messageDir).Msg("Unable to verify existence of message directory")
+		} else if !stat.IsDir() {
+			log.Error().Str("-messages", messageDir).Msg("Not a directory")
 		}
 	}
+
+	var formatFailure bool
+	if !isFormat[stdFormat] {
+		log.Error().Str("-stdFormat", stdFormat).Msg("Unrecognized stdFormat")
+		formatFailure = true
+	}
+	if logFilePath != "" && !isFormat[fileFormat] {
+		log.Error().Str("-fileFormat", stdFormat).Msg("Unrecognized log file format")
+		formatFailure = true
+	}
+	if formatFailure {
+		return
+	}
+
+	if err := logSetup(); err != nil {
+		log.Error().Err(err).Msg("Failed to configure log options")
+		return
+	}
+	defer logShutdown()
+	setStdFormat()
+	setFileFormat()
 
 	log.Info().Msg("LSP starting")
 	defer log.Info().Msg("LSP finished")
@@ -106,6 +114,10 @@ func main() {
 		}
 
 		if requestPath != "" {
+			if strings.HasPrefix(requestPath, "~/") {
+				dirname, _ := os.UserHomeDir()
+				requestPath = filepath.Join(dirname, requestPath[2:])
+			}
 			if rqst, err := loadMessage(requestPath); err != nil {
 				log.Error().Err(err).Msgf("Load request from file %s", requestPath)
 			} else if err := sendMessage("server", rqst, connection); err != nil {

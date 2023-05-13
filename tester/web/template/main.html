@@ -33,14 +33,14 @@
 </form>
 {{end}}
 <h2>Log Format</h2>
-<form action="/" method="post">
-    <input type="hidden" name="form" value="format" />
-    {{range $index, $format := $.formats}}
-        <input type="radio" id="{{$format}}" name="logFormat" value="{{$format}}" {{if eq $format $.logFormat}}checked{{end}}>
-        <label for="{{$format}}">{{$format}}</label><br>
-    {{end}}
-    <input type="submit" value="Change Log Format">
-</form>
+<div class="formats">
+    <div>
+        {{template "format" $.stdFormat}}
+    </div>
+    <div>
+        {{template "format" $.fileFormat}}
+    </div>
+</div>
 <h2>Result</h2>
 <div class="text">
     {{range $index, $line := $.result}}{{$line}}<br>{{end}}
@@ -50,3 +50,21 @@
     {{range $index, $line := $.errors}}{{$line}}<br>{{end}}
 </div>
 {{end}}
+
+{{define "format"}}
+<form action="/" method="post">
+    <strong>{{.formatName}}</strong><br>
+    {{if .active}}
+    <input type="hidden" name="form" value="format" />
+    <input type="hidden" name="formatName" value="{{.formatName}}" />
+    {{range $index, $format := .allFormats}}
+    <input type="radio" id="{{$format}}" name="logFormat" value="{{$format}}" {{if eq $format $.logFormat}}checked{{end}}>
+    <label for="{{$format}}">{{$format}}</label><br>
+    {{end}}
+    <input type="submit" value="Change Log Format">
+    {{else}}
+    Not active
+    {{end}}
+</form>
+{{end}}
+

@@ -23,19 +23,15 @@ func webServer(port uint) {
 		waiter.Done()
 	}()
 
+	log.Info().Str("URL", "http://localhost:"+strconv.Itoa(int(port))).Msg("Web service")
+
 	if err := loadMessageFiles(); err != nil {
 		log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
 	}
 
 	data := webData{
-		"logFormat": logFormat,
-		"formats":   []string{"default", "expanded", "simple"},
 		"messages":  messages,
 		"receivers": receivers,
-	}
-
-	if defaultWriter == nil {
-		data["formats"] = []string{"default", "simple"}
 	}
 
 	const configurePageError = "Configuring page handler"
@@ -122,8 +118,19 @@ func handlePage(name, url string, startData webData, pre, post func(r *http.Requ
 			}
 			data["lastMessage"] = lastMessage
 			data["lastTarget"] = lastTarget
-			data["logFormat"] = logFormat
 			data["page"] = name
+			data["stdFormat"] = webData{
+				"formatName": "Console",
+				"logFormat":  stdFormat,
+				"allFormats": allFormats,
+				"active":     true,
+			}
+			data["fileFormat"] = webData{
+				"formatName": "File",
+				"logFormat":  fileFormat,
+				"allFormats": allFormats,
+				"active":     logFile != nil,
+			}
 
 			if pre != nil {
 				pre(r, data)
@@ -154,25 +161,25 @@ func preMain(rqst *http.Request, data webData) {
 }
 
 func preLogFormatPost(rqst *http.Request, data webData) {
-	logFormat = rqst.FormValue("logFormat")
-	switch logFormat {
-	case "default":
-		simpleFormat = false
-		if defaultWriter != nil {
-			log.SetLogger(log.Logger().Output(defaultWriter))
+	formatName := rqst.FormValue("formatName")
+	switch formatName {
+	case "Console":
+		stdFormat = rqst.FormValue("logFormat")
+		setStdFormat()
+		if fmtData, ok := data["stdFormat"].(webData); ok {
+			fmtData["logFormat"] = stdFormat
 		}
-	case "expanded":
-		simpleFormat = false
-		if expandedWriter == nil {
-			data["errors"] = []string{"Unable to use expanded logging without -console"}
-		} else {
-			log.SetLogger(log.Logger().Output(expandedWriter))
+		data["result"] = []string{"Console log format now " + stdFormat}
+	case "File":
+		fileFormat = rqst.FormValue("logFormat")
+		setFileFormat()
+		if fmtData, ok := data["fileFormat"].(webData); ok {
+			fmtData["logFormat"] = fileFormat
 		}
-	case "simple":
-		simpleFormat = true
+		data["result"] = []string{"Log file format now " + fileFormat}
+	default:
+		log.Error().Str("formatName", formatName).Msg("Unknown format name")
 	}
-	data["logFormat"] = logFormat
-	data["result"] = []string{"Log format now " + logFormat}
 }
 
 func preSendMessagePost(rqst *http.Request, data webData) {

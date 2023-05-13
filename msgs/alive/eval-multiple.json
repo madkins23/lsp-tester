@@ -1,8 +1,0 @@
-{
-  "method": "$/alive/eval",
-  "params": {
-    "text": "(+ 2 (/ 15 5))(* 17 23)(- 69 67)",
-    "package": "cl-user",
-    "storeResult": true
-  }
-}

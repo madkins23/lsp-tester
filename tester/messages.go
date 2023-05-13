@@ -114,10 +114,16 @@ var (
 )
 
 func logMessage(from, to, msg string, content []byte) {
-	const (
-		leftArrow  = "<--"
-		rightArrow = "-->"
-	)
+	logMessageTo(from, to, msg, content, stdLogger, stdFormat)
+	logMessageTo(from, to, msg, content, fileLogger, fileFormat)
+}
+
+const (
+	leftArrow  = "<--"
+	rightArrow = "-->"
+)
+
+func logMessageTo(from, to, msg string, content []byte, logger zerolog.Logger, format string) {
 	var direction string
 	if strings.HasPrefix(from, "client") {
 		direction = from + rightArrow + to
@@ -133,17 +139,17 @@ func logMessage(from, to, msg string, content []byte) {
 		direction = from + leftArrow + to
 	}
 
-	event := log.Info().Str("!", direction).Int("#size", len(content))
+	event := logger.Info().Str("!", direction).Int("#size", len(content))
 
-	if simpleFormat {
+	if format == fmtKeyword {
 		data := make(genericData)
 		if err := json.Unmarshal(content, &data); err != nil {
 			log.Warn().Err(err).Msg("Unmarshal content")
 			// Fall through to end where raw JSON is added.
 		} else {
-			event = log.Info().Str("!", direction).Int("#size", len(content))
-			if err := simpleMessageFormat(data, content, event, msg); err != nil {
-				log.Warn().Err(err).Msg("simpleMessageFormat()")
+			event = logger.Info().Str("!", direction).Int("#size", len(content))
+			if err := keywordMessageFormat(data, event, msg); err != nil {
+				log.Warn().Err(err).Msg("keywordMessageFormat()")
 			}
 			return
 		}
@@ -154,7 +160,7 @@ func logMessage(from, to, msg string, content []byte) {
 
 const maxDisplayLen = 32
 
-func simpleMessageFormat(data genericData, content []byte, event *zerolog.Event, msg string) error {
+func keywordMessageFormat(data genericData, event *zerolog.Event, msg string) error {
 	var msgType string
 	if method, found := data.getStringField("method"); found {
 		event.Str("%method", method)

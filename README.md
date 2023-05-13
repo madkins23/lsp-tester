@@ -1,5 +1,6 @@
 # lsp-tester
-Tool to do basic testing of a Language Server Protocol (LSP) server.
+Tool to do basic testing of the communication between a VSCode language extension and
+a Language Server Protocol (LSP) server providing support to that extension.
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/madkins23/lsp-tester)](https://goreportcard.com/report/github.com/madkins23/lsp-tester)
 ![GitHub](https://img.shields.io/github/license/madkins23/lsp-tester)
@@ -8,15 +9,20 @@ Tool to do basic testing of a Language Server Protocol (LSP) server.
 
 ## Notes
 
-This is an early (pre-)release.
-This `lsp-tester` tool was originally created to help with work on the `Alive` VSCode
-language extension and the `Alive-lsp` LSP server.
-All work was done on Linux.
-_Your mileage may vary_.
+This tool was created to provide a view into message traffic between a VSCode extension and
+the LSP server used by the extension.
+The author spent some time looking for a pre-existing tool of this sort.
+The only thing found appeared to be out of date and not supported.
+The author is resigned to finding out tomorrow that a much better tool already exists.
+[So it goes](https://en.wikipedia.org/wiki/Slaughterhouse-Five).
 
-There is no "off" switch for `lsp-tester`.
-Use `<ctrl>-C` to kill it when you're done.
-There is an hour timeout hard-coded in at the moment.
+The impetus for this work was poking into the internals of the Common Lisp language extension
+[Alive](https://github.com/nobody-famous/alive) and
+its LSP server [Alive-lsp](https://github.com/nobody-famous/alive-lsp).
+While this work has nothing to do with those projects or their author
+(please don't bother them about this project)
+the examples of log information provided below reflect Alive message traffic.
+_Mea culpa_.
 
 ## Modes
 
@@ -45,7 +51,7 @@ Example:
 ```shell
 lsp-tester -serverPort=8006
 ```
-About all this will show is whatever startup request is made when the
+About all this will show is whatever startup message(s) is(are) sent when the
 VSCode extension tries to connect to its REPL Server.
 
 If the extension code is able to re-connect after its server goes down
@@ -61,23 +67,83 @@ Example:
 ```shell
 lsp-tester -serverPort=8006 -clientPort=8007
 ```
-
 This is potentially very useful for debugging or testing
-as `lsp-tester` will show all message traffic.
+as `lsp-tester` will show all message traffic between the two.
+See the **Usage Examples** section below for suggestions on how to use this mode.
 
 ## Output
 
-Output can be directed to the console or a file.
+Log output is written to the console and optionally to a log file.
+There are four **Log Formats** described below which are available to
+either console or log files and can be configured separately.
+For either log destination the default format is `default`.
 
 ### Console Output
 
-#### Default Format
+Console output is always written to the standard output stream (`os.Stderr`).
+There is no way to turn this off but choosing an appropriate log format
+can reduce the amount of text.
+Use the `-logFormat=<format>` flag to change the log format for the console.
+
+### File Output
+
+By default `lsp-tester` does not send output to a file.
+This can be accomplished by specifying the `-logFile=<logFilePath>` flag:
+```shell
+lsp-tester -serverPort=8006 -clientPort=8007 -logFile=<logFilePath>
+```
+Use the `-fileFormat=<format>` flag to change the log format for the log file.
+
+By default, each invocation of `lsp-tester` with a log file defined
+will cause the old log file to be truncated on open.
+To cause new messages to be appended to a pre-existing log file use flag `-fileAppend`:
+```shell
+lsp-tester -serverPort=8006 -clientPort=8007 -logFile=<logFilePath> -fileAppend
+```
+In this case a blank line will be emitted to separate the new messages from the old ones:
+```
+09:39:52 INF Send !=tester-->server #size=125 msg={"id":"81","jsonrpc":"2.0","method":"$/alive/eval","params":{"package":"cl-user","storeResult":true,"text":"(+ 2 (/ 15 5))"}}
+09:39:52 INF Rcvd !=tester<--server #size=58 msg={"jsonrpc":"2.0","method":"$/alive/refresh","params":{}}
+09:39:52 INF Rcvd !=tester<--server #size=49 msg={"id":"81","jsonrpc":"2.0","result":{"text":"5"}}
+09:39:52 INF Rcvd !=tester<--server #size=58 msg={"jsonrpc":"2.0","method":"$/alive/refresh","params":{}}
+
+09:39:59 INF Send !=tester-->server #size=125 msg={"id":"81","jsonrpc":"2.0","method":"$/alive/eval","params":{"package":"cl-user","storeResult":true,"text":"(+ 2 (/ 15 5))"}}
+09:39:59 INF Rcvd !=tester<--server #size=58 msg={"jsonrpc":"2.0","method":"$/alive/refresh","params":{}}
+09:39:59 INF Rcvd !=tester<--server #size=49 msg={"id":"81","jsonrpc":"2.0","result":{"text":"5"}}
+09:39:59 INF Rcvd !=tester<--server #size=58 msg={"jsonrpc":"2.0","method":"$/alive/refresh","params":{}}
+```
+
+### Log Formats
+
+Specific conventions used in all output formats:
+
+| Example             | Definition                                     |
+|---------------------|------------------------------------------------|
+| `!=tester-->server` | Direction of message [^1]                      |
+| `#size=125`         | Size of content from message header            |
+
+[^1]: In Nexus mode there will be two log items for each message.
+The first will be from the client or server to the tester,
+the second will be from the tester to the server or client as appropriate
+
+In all formats but `json` these will be at the left of every line
+after the timestamp, log level, and message text.
+In `json` mode these fields will still be present but not as easy to find.
+
+The message direction is configured so that the `client`, when present, is on the left and
+the `server`, when present, is on the right.
+
+In the examples below the use of `logFormat=<format>` always imply
+the same behavior for log files by using `fileFormat=<format>`.
+These are separate settings but work the same.
+
+#### Format: `default`
 
 Console output provides a line per message by default.
 
 For example:
 ```shell
-lsp-tester -console -serverPort=8006 -request=<file path>
+lsp-tester serverPort=8006 -request=<file path>
 ```
 might result in the following:
 ```
@@ -87,12 +153,13 @@ might result in the following:
 16:13:30 INF Rcvd !=tester<--server #size=47 msg={"id":81,"jsonrpc":"2.0","result":{"text":"5"}}
 16:13:30 INF Rcvd !=tester<--server #size=58 msg={"jsonrpc":"2.0","method":"$/alive/refresh","params":{}}
 ```
+This is the default format for output.
 
-#### Expanded Format
+#### Format: `expand`
 
 The JSON content of the `msg` field can also be expanded using:
 ```shell
-lsp-tester -console -expand -serverPort=8006 -request=<file path>
+lsp-tester -logFormat=expand -serverPort=8006 -request=<file path>
 ```
 so that the previous log data would show as:
 ```
@@ -130,12 +197,13 @@ so that the previous log data would show as:
 }
 ```
 
-#### Simple Format
+#### Format `keyword`
 
 On the other hand, large amounts of data can sometimes be generated
-(especially during initialization) so there is a log simplification mode:
+(especially during initialization) so there is a mode that attempts to
+analyze the traffic and show the most useful bits:
 ```shell
-lsp-tester -console -simple -serverPort=8006 -request=<file path>
+lsp-tester -logFormat=keyword -serverPort=8006 -request=<file path>
 ```
 in which the previous log data would show as:
 ```
@@ -152,8 +220,6 @@ Specific conventions used in this format:
 
 | Example             | Definition                                     |
 |---------------------|------------------------------------------------|
-| `!=tester-->server` | Direction of message [^1]                      |
-| `#size=125`         | Size of content from message header            |
 | `$Type=request`     | Type of message [^2]                           |
 | `%ID=81`            | Message ID                                     |
 | `%method=$/alive/eval` | Method for request                             |
@@ -162,35 +228,22 @@ Specific conventions used in this format:
 | `<>method=$/alive/eval` | Method from request provided with response [^3] |
 | `<>text="(+ 2 (/ 15 5))"` | Parameter from request provided with response [^3] |                                 
 
-Notes:
-
-[^1]: In Nexus mode there will be two log items for each message.
-The first will be from the client or server to the tester,
-the second will be from the tester to the server or client as appropriate
-
 [^2]: The `$Type` of message is derived from the available fields.
-There is no specific "type" field in the Language Server Protocol.
+There is no specific "type" field in the Language Server Protocol
+so this derivation is somewhat fuzzy and may be wrong sometimes.
 
-[^3]: Method and parameter data  from requests is stored by ID,
+[^3]: Method and parameter data from requests is stored by ID,
 looked up when a response message is found with the same ID, and
 added to the log entry for the response using the `<>` prefix.
 This data is not actually in the response message.
 
-### File Output
+#### Format: `json`
 
-By default `lsp-tester` will direct output to a file using the same
-format described above.
-File output is set by _not_ using the `-console` flag.
-The default filename is `/tmp/lsp-tester.log` but can be overridden:
+It is also possible to generate the log statements as individual JSON records:
 ```shell
-lsp-tester -serverPort=8006 -clientPort=8007 -logFile=<path>
+lsp-tester -logFormat=keyword -serverPort=8006 -request=<file path>
 ```
-
-File contents can also be dumped as JSON records:
-```shell
-lsp-tester -serverPort=8006 -clientPort=8007 -logFile=<path> -logJSON
-```
-yielding:
+in which the previous log data would show as:
 ```
 {"level":"info","time":"2023-05-06T17:25:54-07:00","message":"LSP starting"}
 {"level":"debug","!from":"tester","!to":"server","#size":123,"msg":{"jsonrpc":"2.0","id":81,"method":"$/alive/eval","params":{"package":"cl-user","storeResult":true,"text":"(+ 2 (/ 15 5))"}},"time":"2023-05-06T17:25:54-07:00","message":"Send"}
@@ -203,20 +256,28 @@ yielding:
 
 An embedded web server provides some interactive control over `lsp-tester`.
 The following functionality may be invoked while the tester is running:
-* Change the log format.
+* Change the log format for console or file output.
 * Send messages stored in files to server or client.
 
 ### Starting the Web Server
 
 The web server is only started if a `-webPort` flag is specified with a non-zero value:
 ```
-lsp-tester -console -serverPort=8006 -clientPort=8007 -webPort=8008
+lsp-tester -serverPort=8006 -clientPort=8007 -webPort=8008
 ```
 
 The server will be accessible from a browser at `http://localhost:<webPort>`.
 The main (and currently only) page:
 
 ![lsp-tester main web page](./images/webMain.png)
+
+#### Icons
+
+The generic "house" icon invokes the main page which is already displayed.
+This is mostly handy for re-executing the page after restarting `lsp-tester`.
+It will also clear the **Result** and **Errors** boxes.
+
+The "bomb" icon executes a graceful shutdown of `lsp-tester`.
 
 #### Connections
 
@@ -230,7 +291,7 @@ but there can be multiple numbered `client-#` connections over time
 Messaging requires a directory of `.json` message files.
 The `-messages` flag specifies the path to this directory:
 ```
-lsp-tester -console -serverPort=8006 -clientPort=8007 -webPort=8008 -messages=<dirPath>
+lsp-tester -serverPort=8006 -clientPort=8007 -webPort=8008 -messages=<dirPath>
 ```
 The `-messages` flag is only used when `-webPort` is used to activate the web server.
 Message files are `.json` files with properly configured LSP messages.
@@ -243,26 +304,72 @@ The `Send Message` button will send the actual message.
 #### Change Log Format
 
 The log format can be changed while `lsp-tester` is running.
-The three radio buttons represent the three log formats as described above  in the **Output** section.
-Select one of the log formats and use the `Change Log Format` message.
-All subsequent messaging will be in the new format unless changed again.
+There are side-by-forms for **Console** and **File** output format
+(the latter will only be displayed if a log file is configured using the `-logFile` flag).
+For each form the four radio buttons represent the three log formats
+as described above in the **Output** section.
+Select one of the log formats and use the `Change Log Format` button.
+All subsequent messaging will be in the new format until changed again.
 
 ### Output
 
-Output from `lsp-tester` will continue to be via either `stderr` or a file.
+Output from `lsp-tester` will continue to be to the console and optionally a log file.
 There is currently no provision for seeing the log via the web interface
 which is used only to control `lsp-tester`.
 
-### Usage Scenario
+### Usage Examples
+
+#### Client Mode with Request
+
+This is the original use case for `lsp-tester`.
+
+1. Bring up the LSP server with a specified port.
+2. Run `lsp-tester` specifying:
+   * the LSP server port in `-serverPort`,
+   * a JSON request file in `-request`, and
+   * whatever non-default `-logFormat` is desired
+
+After connecting to the server the request will be sent to the server.
+This a quick test that a particular LSP feature returns the expected traffic.
+
+After the message traffic `lsp-tester` continues running,
+mostly because it isn't possible to determine when the server response traffic is done.
+Kill the program with `<ctrl>-C` (or via the web interface if it is configured).
+
+#### Nexus Mode with File Output
+
+Initialization traffic between the VSCode extension host and the LSP server can be quite large.
+It is possible to have the best of both worlds by configuring the log file output:
+
+1. Bring up the LSP server with a specified port.
+2. Run `lsp-tester` specifying:
+    * the LSP server port in `-serverPort`,
+    * an appropriate port in `-clientPort`,
+    * a log file in `-logFile=<logFilePath>`,
+    * small console output like `-logFormat=keyword`, and
+    * large file format like `fileFormat=expand` or `fileFormat=json`.
+3. Configure the VSCode extension to contact the chosen `lsp-tester` `-clientPort`.
+4. Start the extension or restart it via the **Developer: Reload Window** command.
+
+Console logging will give the gist of the message traffic and
+file logging will capture the full messages for later examination.
+
+Hint: if available, a second shell window or tab running `tail -f <logFilePath>`
+will show the expanded traffic in real time.
+
+#### Nexus Mode with Web Interface
 
 The web interface provides the means to execute complex testing scenarios:
 
 1. Bring up the LSP server with a specified port.
-2. Run `lsp-tester` specifying the LSP server port in `-serverPort` and `--simple`.
-3. Configure the VSCode extension to contact the `lsp-tester` `-clientPort`.
+2. Run `lsp-tester` specifying:
+   * the LSP server port in `-serverPort`,
+   * an appropriate port in `-clientPort`, and 
+   * a small output like `-logFormat=keyword`.
+3. Configure the VSCode extension to contact the chosen `lsp-tester` `-clientPort`.
 4. Start the extension or restart it via the **Developer: Reload Window** command.
 5. Wait for the initialization traffic to clear in the `lsp-tester` output stream.
-6. Use the web interface to change the output format to `default` or `expanded`.
+6. Use the web interface to change the output format to `default` or `expand`.
 7. Use the web interface to send any desired message to either the extension or the LSP server.
 
 This scenario handles two problems:
@@ -274,18 +381,54 @@ This scenario handles two problems:
 
 | Flag          | Type     | Description                                          |
 |---------------|----------|------------------------------------------------------|
-| `-clientPort` | `uint`   | Port number served for extension to contact          |
+| `-host`       | `string` | LSP server host address (default `"127.0.0.1"`)      |
+| `-clientPort` | `uint`   | Port number served for extension client to contact   |
 | `-serverPort` | `uint`   | Port number on which to contact LSP server           |
-| `-console`    | `bool`   | Log to the console instead of the specified log file |
-| `-expand`     | `bool`   | Expand message JSON in log if true                   |
-| `-simple`     | `bool`   | Show simplified console log entries                  |
-| `-host`       | `string` | Host address (default "127.0.0.1")                   |
-| `-logFile`    | `string` | Log file path (default "/tmp/lsp-tester.log")        |
-| `-logJSON`    | `bool`   | Log output to file as JSON objects                   |
-| `-request`    | `string` | Path to requestPath file (client mode)               |
 | `-webPort`    | `uint`   | Port for web server for interactive control          |
+| `-logFormat`  | `string` | Format value for console output (see below)          |
+| `-logFile`    | `string` | Log file path (default no log file)                  |
+| `-fileAppend` | `bool`   | Append to any pre-existing log file                  |
+| `-fileFormat` | `string` | Format value for log file (see below)                |
+| `-request`    | `string` | Path to file to be sent when connected (client mode) |
 | `-messages`   | `string` | Path to directory of message files (for Web server)  |
 | `-help`       | `bool`   | Show usage and flags                                 |
 
-Boolean (`bool`) flags do not require a value.
-For example, the flag `-console` is equivalent to `-console=true`.
+Boolean flags (e.g. `-fileAppend` and `-help`) do not require a value.
+The presence of such a flag indicates a value of `true`.
+
+Format values can be set separately for console output and optional log file.
+
+| Value     | Description                                                    |
+|-----------|----------------------------------------------------------------|
+| `default` | Linear format with messages output as single-line JSON         |
+| `expand`  | Linear format with message content appended as multi-line JSON |
+| `keyword` | Linear format with messages parsed to key fields               |
+| `json`    | JSON object with message content embedded as more JSON         |
+
+It is not necessary to specify `default` for `-logFormat` or `-fileFormat`.
+
+## Development Notes
+
+This application started as a simple one file project and
+mutated over time to include a lot of other functionality.
+Consequently, the application structure is less rigorous than the author would like.
+In particular:
+* there is no packaging of subcomponents and
+* there are an awful lot of global variables scattered hither and yon.
+
+In the fullness of time the application may be refactored to reflect
+modern software engineering precepts and style.
+On the other hand, it is still a fairly small chunk of code and not _too_ terribly hard to
+[grok](https://en.wikipedia.org/wiki/Grok).
+Remember, [time is fleeting](https://www.youtube.com/watch?v=umj0gu5nEGs)[^4] and 
+we all have other stuff to do. ;-)
+
+Feel free to fork the code and rewrite it if you desire.
+Please don't send any massive refactoring PRs, no matter how tempting.
+PRs with small changes may be welcome if the author has the time and is in the mood.
+Just like with any other open source application.
+
+Thanks for listening.
+
+[^4]: It turns out the "pelvic thrust" is a good way to unkink one's back after
+leaning forward in one's chair for hours peering into a computer screen. ;-)
