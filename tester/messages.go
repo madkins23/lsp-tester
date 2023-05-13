@@ -109,6 +109,7 @@ func sendContent(to string, content []byte, connection net.Conn) error {
 }
 
 var (
+	// TODO: These are not garbage collected and will eventually get very large.
 	methodByID = make(map[any]string)
 	paramsByID = make(map[any]any)
 )
@@ -158,6 +159,7 @@ func logMessageTo(from, to, msg string, content []byte, logger zerolog.Logger, f
 	event.RawJSON("msg", content).Msg(msg)
 }
 
+// Make this a command line flag.
 const maxDisplayLen = 32
 
 func keywordMessageFormat(data genericData, event *zerolog.Event, msg string) error {
@@ -226,7 +228,7 @@ func addDataToEvent(prefix string, data any, event *zerolog.Event) {
 		}
 		addToEventWithLog(label, array, event)
 	} else if data != nil {
-		log.Warn().Msg("Params not a map")
+		log.Warn().Msg("Data not a map in addDataToEvent()")
 	}
 }
 
@@ -236,29 +238,29 @@ func addErrorToEvent(errAny any, event *zerolog.Event) {
 	} else if errHash, ok := errAny.(map[string]interface{}); ok {
 		if code, found := errHash["code"]; found {
 			if codeInt, ok := code.(int); ok {
-				event.Int("err-codeInt", codeInt)
+				event.Int("!code", codeInt)
 			}
 		}
 		if msg, found := errHash["message"]; found {
 			if message, ok := msg.(string); ok {
-				event.Str("err-msg", message)
+				event.Str("!msg", message)
 			}
 		}
 		if data, found := errHash["data"]; found {
-			addToEventWithLog("err-data", data, event)
+			addToEventWithLog("!data", data, event)
 		}
 	}
 }
 
-func addToEventWithLog(key string, item any, event *zerolog.Event) {
-	if found, err := addToEvent(key, item, event); err != nil {
-		log.Warn().Err(err).Msgf("Adding %s to event", key)
+func addToEventWithLog(label string, item any, event *zerolog.Event) {
+	if found, err := addToEvent(label, item, event); err != nil {
+		log.Warn().Err(err).Msgf("Adding %s to event", label)
 	} else if !found {
-		log.Debug().Msgf("Empty %s", key)
+		log.Debug().Msgf("Empty %s", label)
 	}
 }
 
-func addToEvent(key string, item any, event *zerolog.Event) (bool, error) {
+func addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 	added := true
 	if text, ok := item.(string); ok {
 		if len(text) > maxDisplayLen {
@@ -267,17 +269,17 @@ func addToEvent(key string, item any, event *zerolog.Event) (bool, error) {
 		if text == "" {
 			return false, nil
 		} else {
-			event.Str(key, text)
+			event.Str(label, text)
 		}
 	} else if number, ok := item.(float64); ok {
-		event.Float64(key, number)
+		event.Float64(label, number)
 	} else if boolean, ok := item.(bool); ok {
-		event.Bool(key, boolean)
+		event.Bool(label, boolean)
 	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
 		// TODO: Should this now dump every key?
-		for _, attempt := range []string{key, "text", "path", "value", "data"} {
+		for _, attempt := range []string{label, "text", "path", "value", "data"} {
 			if something, found := hash[attempt]; found {
-				if done, err := addToEvent(key, something, event); err != nil {
+				if done, err := addToEvent(label, something, event); err != nil {
 					return false, fmt.Errorf("addToEvent: %w", err)
 				} else if done {
 					return true, nil
@@ -286,9 +288,9 @@ func addToEvent(key string, item any, event *zerolog.Event) (bool, error) {
 		}
 		added = false
 	} else if array, ok := item.([]any); ok && len(array) > 0 {
-		event.Int(key+"#", len(array))
+		event.Int(label+"#", len(array))
 		for _, element := range array {
-			if done, err := addToEvent(key+"[0]", element, event); err != nil {
+			if done, err := addToEvent(label+"[0]", element, event); err != nil {
 				return false, fmt.Errorf("addToEvent: %w", err)
 			} else if done {
 				// Only shows first item in array.
@@ -300,7 +302,7 @@ func addToEvent(key string, item any, event *zerolog.Event) (bool, error) {
 		if str, err := marshalAny(item); err != nil {
 			return false, fmt.Errorf("marshalAny: %w", err)
 		} else {
-			event.Str(key, str)
+			event.Str(label, str)
 			added = true
 		}
 	}
