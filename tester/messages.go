@@ -276,16 +276,8 @@ func addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 	} else if boolean, ok := item.(bool); ok {
 		event.Bool(label, boolean)
 	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
-		// TODO: Should this now dump every key?
-		for _, attempt := range []string{label, "text", "path", "value", "data"} {
-			if something, found := hash[attempt]; found {
-				if done, err := addToEvent(label, something, event); err != nil {
-					return false, fmt.Errorf("addToEvent: %w", err)
-				} else if done {
-					return true, nil
-				}
-			}
-		}
+		// Most useful hash data is handled in other functions,
+		// just let this fall through and be shown as JSON.
 		added = false
 	} else if array, ok := item.([]any); ok && len(array) > 0 {
 		event.Int(label+"#", len(array))
