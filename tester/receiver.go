@@ -57,12 +57,12 @@ func (r *receiver) kill() error {
 
 func (r *receiver) receive(ready *chan bool) {
 	log.Info().Str("to", r.to).Msg("Receiver starting")
+	defer log.Info().Str("to", r.to).Msg("Receiver finished")
+
 	waiter.Add(1)
-	defer func() {
-		log.Info().Str("to", r.to).Msg("Receiver finished")
-		delete(receivers, r.to)
-		waiter.Done()
-	}()
+	defer waiter.Done()
+
+	defer delete(receivers, r.to)
 
 	content := make([]byte, 1048576) // 1 Mb
 	reader := bufio.NewReader(r.conn)

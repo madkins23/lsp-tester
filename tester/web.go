@@ -17,11 +17,10 @@ type webData map[string]any
 
 func webServer(port uint) {
 	log.Info().Uint("port", port).Msg("Web server starting")
+	defer log.Info().Uint("port", port).Msg("Web server finished")
+
 	waiter.Add(1)
-	defer func() {
-		log.Info().Uint("port", port).Msg("Web server finished")
-		waiter.Done()
-	}()
+	defer waiter.Done()
 
 	log.Info().Str("URL", "http://localhost:"+strconv.Itoa(int(port))).Msg("Web service")
 

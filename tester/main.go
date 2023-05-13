@@ -174,9 +174,7 @@ func listenForClient(port uint, listener net.Listener, configureFn func(conn net
 	defer log.Info().Uint("port", port).Msg("Listener finished")
 
 	waiter.Add(1)
-	defer func() {
-		waiter.Done()
-	}()
+	defer waiter.Done()
 
 	for {
 		if conn, err := listener.Accept(); err == nil {

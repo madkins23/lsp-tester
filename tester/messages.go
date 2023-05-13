@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/madkins23/go-utils/log"
 	"github.com/rs/zerolog"
@@ -76,7 +77,7 @@ func loadMessage(requestPath string) (genericData, error) {
 // and contained relative path fields are replaced with absolute paths.
 func sendMessage(to string, message genericData, connection net.Conn) error {
 	message["jsonrpc"] = jsonRpcVersion
-	message["id"] = strconv.Itoa(rand.Intn(idRandomRange))
+	message["id"] = strconv.Itoa(idRandomRange + rand.Intn(idRandomRange))
 
 	if params, ok := message["params"].(genericData); ok {
 		if path, found := params["path"]; found {
@@ -107,12 +108,6 @@ func sendContent(to string, content []byte, connection net.Conn) error {
 
 	return nil
 }
-
-var (
-	// TODO: These are not garbage collected and will eventually get very large.
-	methodByID = make(map[any]string)
-	paramsByID = make(map[any]any)
-)
 
 func logMessage(from, to, msg string, content []byte) {
 	logMessageTo(from, to, msg, content, stdLogger, stdFormat)
@@ -159,6 +154,36 @@ func logMessageTo(from, to, msg string, content []byte, logger zerolog.Logger, f
 	event.RawJSON("msg", content).Msg(msg)
 }
 
+// Keep ID maps below for this long before deleting them.
+const idExpiration = 5 * time.Second
+
+var (
+	methodByID = make(map[any]string)
+	paramsByID = make(map[any]any)
+	expireByID = make(map[any]time.Time)
+	expireGCgo bool
+)
+
+// expirationGC cleans up expireByID, methodByID, and paramsByID
+// to avoid having them fill up all available memory over time.
+func expirationGC() {
+	// Note: Don't worry about graceful shutdown,
+	// this goroutine will go away when the application dies.
+	// It will not hold up any normal shutdown process.
+	for {
+		now := time.Now()
+		for id, expires := range expireByID {
+			if now.After(expires) {
+				log.Trace().Any("ID", id).Msg("Delete expiration")
+				delete(expireByID, id)
+				delete(methodByID, id)
+				delete(paramsByID, id)
+			}
+		}
+		time.Sleep(idExpiration)
+	}
+}
+
 // Make this a command line flag.
 const maxDisplayLen = 32
 
@@ -172,6 +197,11 @@ func keywordMessageFormat(data genericData, event *zerolog.Event, msg string) er
 			msgType = "request"
 			event.Any("%ID", id)
 			methodByID[id] = method
+			expireByID[id] = time.Now().Add(idExpiration)
+			if !expireGCgo {
+				go expirationGC()
+				expireGCgo = true
+			}
 		}
 		if params, found := data.getField("params"); found {
 			addDataToEvent("<", params, event)
