@@ -1,0 +1,4 @@
+* Continue to pull fields out of messages on simple-messages branch
+  - (even though they're now keyword messages)
+  - e.g. textDocument
+* Approaching time to go public with v1.0
