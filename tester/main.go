@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/madkins23/go-utils/log"
 )
@@ -133,9 +132,6 @@ func main() {
 	if webPort > 0 {
 		go webServer(webPort)
 	}
-
-	// TODO: something less arbitrary here
-	time.Sleep(1 * time.Second)
 
 	waiter.Wait()
 }
