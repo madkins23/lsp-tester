@@ -13,28 +13,11 @@ import (
 	"time"
 
 	"github.com/madkins23/go-utils/log"
-	"github.com/rs/zerolog"
 )
 
 var (
-	messageDir string
-)
-
-var (
-	defaultWriter  *zerolog.ConsoleWriter
-	expandedWriter *zerolog.ConsoleWriter
-	stdFormat      = "default"
-	fileFormat     = "default"
-	logFilePath    string
-	fileAppend     = false
-)
-
-var (
-	listener  net.Listener
-	messages  []string
-	receivers = make(map[string]*receiver)
-	// TODO: Make something that can return number of waiting things.
-	waiter sync.WaitGroup
+	listener net.Listener
+	waiter   sync.WaitGroup
 )
 
 func main() {
@@ -53,6 +36,7 @@ func main() {
 	flags.UintVar(&webPort, "webPort", 0, "Web port number to enable web access")
 	flags.StringVar(&messageDir, "messages", "", "Path to directory of message files")
 	flags.StringVar(&requestPath, "request", "", "Path to requestPath file (client mode)")
+	flags.StringVar(&logLevel, "logLevel", "info", "Set log level")
 	flags.StringVar(&stdFormat, "logFormat", fmtDefault, "Console output format")
 	flags.StringVar(&logFilePath, "logFile", "", "Log file path")
 	flags.BoolVar(&fileAppend, "fileAppend", false, "Append to any pre-existing log file")

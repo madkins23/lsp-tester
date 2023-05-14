@@ -15,6 +15,10 @@ import (
 
 type webData map[string]any
 
+var (
+	messageDir string
+)
+
 func webServer(port uint) {
 	log.Info().Uint("port", port).Msg("Web server starting")
 	defer log.Info().Uint("port", port).Msg("Web server finished")

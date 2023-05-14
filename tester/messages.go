@@ -37,6 +37,10 @@ const (
 	jsonRpcVersion  = "2.0"
 )
 
+var (
+	messages []string
+)
+
 // loadMessageFiles loads all message files in the message directory.
 // The message directory is specified by the messageDir global variable.
 // The message file data is stored in the messages global variable as strings.

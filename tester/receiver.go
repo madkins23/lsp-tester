@@ -22,6 +22,10 @@ var (
 	sequence atomic.Uint32
 )
 
+var (
+	receivers = make(map[string]*receiver)
+)
+
 type receiver struct {
 	to    string
 	conn  net.Conn

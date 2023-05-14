@@ -78,6 +78,13 @@ There are four **Log Formats** described below which are available to
 either console or log files and can be configured separately.
 For either log destination the default format is `default`.
 
+### Log Levels
+
+Logging is done using [`zerolog`](https://github.com/rs/zerolog) which provides
+a variety of logging levels.
+The level desired can be set using the `-logLevel=<level>` flag.
+Levels can be `error`, `warn`, `info`, `debug`, or `trace`.
+
 ### Console Output
 
 Console output is always written to the standard output stream (`os.Stderr`).
@@ -379,19 +386,20 @@ This scenario handles two problems:
 
 ## Command Line Flags
 
-| Flag          | Type     | Description                                          |
-|---------------|----------|------------------------------------------------------|
-| `-host`       | `string` | LSP server host address (default `"127.0.0.1"`)      |
-| `-clientPort` | `uint`   | Port number served for extension client to contact   |
-| `-serverPort` | `uint`   | Port number on which to contact LSP server           |
-| `-webPort`    | `uint`   | Port for web server for interactive control          |
-| `-logFormat`  | `string` | Format value for console output (see below)          |
-| `-logFile`    | `string` | Log file path (default no log file)                  |
-| `-fileAppend` | `bool`   | Append to any pre-existing log file                  |
-| `-fileFormat` | `string` | Format value for log file (see below)                |
+| Flag          | Type     | Description                                         |
+|---------------|----------|-----------------------------------------------------|
+| `-host`       | `string` | LSP server host address (default `"127.0.0.1"`)     |
+| `-clientPort` | `uint`   | Port number served for extension client to contact  |
+| `-serverPort` | `uint`   | Port number on which to contact LSP server          |
+| `-webPort`    | `uint`   | Port for web server for interactive control         |
+| `-logLevel`   | `string` | Set the log level (see below      |
+| `-logFormat`  | `string` | Format value for console output (see below)         |
+| `-logFile`    | `string` | Log file path (default no log file)                 |
+| `-fileAppend` | `bool`   | Append to any pre-existing log file                 |
+| `-fileFormat` | `string` | Format value for log file (see below)               |
 | `-request`    | `string` | Path to file to be sent when connected (client mode) |
-| `-messages`   | `string` | Path to directory of message files (for Web server)  |
-| `-help`       | `bool`   | Show usage and flags                                 |
+| `-messages`   | `string` | Path to directory of message files (for Web server) |
+| `-help`       | `bool`   | Show usage and flags                                |
 
 Boolean flags (e.g. `-fileAppend` and `-help`) do not require a value.
 The presence of such a flag indicates a value of `true`.
@@ -406,6 +414,20 @@ Format values can be set separately for console output and optional log file.
 | `json`    | JSON object with message content embedded as more JSON         |
 
 It is not necessary to specify `default` for `-logFormat` or `-fileFormat`.
+
+Log level applies to the entire application.
+Choices are specified in the following table.
+
+| Value   | Description                  |
+|---------|------------------------------|
+| `error` | Messages specifying errors   |
+| `warn`  | Messages specifying warnings |
+| `info`  | Informational messages       |
+| `debug` | Debugging messages           |
+| `trace` | Trace messages               |
+
+Each value includes itself and all messages above it in the table.
+The default value is `info`.
 
 ## Development Notes
 

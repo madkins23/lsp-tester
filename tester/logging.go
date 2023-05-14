@@ -17,6 +17,24 @@ const (
 )
 
 var (
+	logLevel  string
+	logLevels = map[string]zerolog.Level{
+		"error": zerolog.ErrorLevel,
+		"warn":  zerolog.WarnLevel,
+		"info":  zerolog.InfoLevel,
+		"debug": zerolog.DebugLevel,
+		"trace": zerolog.TraceLevel,
+	}
+)
+
+var (
+	stdFormat   = "default"
+	fileFormat  = "default"
+	logFilePath string
+	fileAppend  = false
+)
+
+var (
 	allFormats = []string{
 		fmtDefault,
 		fmtExpand,
@@ -79,6 +97,10 @@ func setFileFormat() {
 
 // logSetup preconfigures all of the possible logging mode data.
 func logSetup() error {
+	if level, found := logLevels[logLevel]; found {
+		zerolog.SetGlobalLevel(level)
+	}
+
 	plainLogger = *log.Logger()
 	zerolog.TimestampFunc = func() time.Time {
 		return time.Now().Local()
