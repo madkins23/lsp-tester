@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -14,22 +13,9 @@ import (
 
 	"github.com/madkins23/go-utils/log"
 	"github.com/rs/zerolog"
+
+	"github.com/madkins23/lsp-tester/tester/logging"
 )
-
-// formatMessageJSON is a FormatExtra function for zerolog.ConsoleWriter.
-// When used it formats the "msg" field as JSON on the lines after the log entry.
-func formatMessageJSON(m map[string]interface{}, buffer *bytes.Buffer) error {
-	if msg, found := m["msg"]; found {
-		if pretty, err := json.MarshalIndent(msg, "", "  "); err != nil {
-			return fmt.Errorf("marshal msg JSON: %w", err)
-		} else {
-			buffer.WriteString("\n")
-			buffer.Write(pretty)
-		}
-	}
-
-	return nil
-}
 
 const (
 	idRandomRange   = 1000
@@ -45,6 +31,7 @@ var (
 // The message directory is specified by the messageDir global variable.
 // The message file data is stored in the messages global variable as strings.
 func loadMessageFiles() error {
+	messageDir := flagSet.MessageDir()
 	if messageDir == "" {
 		// Nothing to do here
 	} else if entries, err := os.ReadDir(messageDir); err != nil {
@@ -114,8 +101,10 @@ func sendContent(to string, content []byte, connection net.Conn) error {
 }
 
 func logMessage(from, to, msg string, content []byte) {
-	logMessageTo(from, to, msg, content, stdLogger, stdFormat)
-	logMessageTo(from, to, msg, content, fileLogger, fileFormat)
+	logMessageTo(from, to, msg, content, logMgr.StdLogger(), flagSet.LogStdFormat())
+	if logMgr.HasLogFile() {
+		logMessageTo(from, to, msg, content, logMgr.FileLogger(), flagSet.LogFileFormat())
+	}
 }
 
 const (
@@ -123,7 +112,7 @@ const (
 	rightArrow = "-->"
 )
 
-func logMessageTo(from, to, msg string, content []byte, logger zerolog.Logger, format string) {
+func logMessageTo(from, to, msg string, content []byte, logger *zerolog.Logger, format string) {
 	var direction string
 	if strings.HasPrefix(from, "client") {
 		direction = from + rightArrow + to
@@ -141,7 +130,7 @@ func logMessageTo(from, to, msg string, content []byte, logger zerolog.Logger, f
 
 	event := logger.Info().Str("!", direction).Int("#size", len(content))
 
-	if format == fmtKeyword {
+	if format == logging.FmtKeyword {
 		data := make(genericData)
 		if err := json.Unmarshal(content, &data); err != nil {
 			log.Warn().Err(err).Msg("Unmarshal content")

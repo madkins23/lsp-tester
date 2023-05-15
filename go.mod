@@ -1,6 +1,6 @@
 module github.com/madkins23/lsp-tester
 
-go 1.19
+go 1.20
 
 require (
 	github.com/madkins23/go-utils v1.37.1

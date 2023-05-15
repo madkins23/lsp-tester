@@ -11,15 +11,14 @@ import (
 	"strconv"
 
 	"github.com/madkins23/go-utils/log"
+
+	"github.com/madkins23/lsp-tester/tester/logging"
 )
 
 type webData map[string]any
 
-var (
-	messageDir string
-)
-
-func webServer(port uint) {
+func webServer() {
+	port := flagSet.WebPort()
 	log.Info().Uint("port", port).Msg("Web server starting")
 	defer log.Info().Uint("port", port).Msg("Web server finished")
 
@@ -29,7 +28,7 @@ func webServer(port uint) {
 	log.Info().Str("URL", "http://localhost:"+strconv.Itoa(int(port))).Msg("Web service")
 
 	if err := loadMessageFiles(); err != nil {
-		log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
+		log.Warn().Err(err).Str("dir", flagSet.MessageDir()).Msg("Unable to read message directory")
 	}
 
 	data := webData{
@@ -124,15 +123,15 @@ func handlePage(name, url string, startData webData, pre, post func(r *http.Requ
 			data["page"] = name
 			data["stdFormat"] = webData{
 				"formatName": "Console",
-				"logFormat":  stdFormat,
-				"allFormats": allFormats,
+				"logFormat":  logMgr.StdFormat(),
+				"allFormats": logging.AllFormats(),
 				"active":     true,
 			}
 			data["fileFormat"] = webData{
 				"formatName": "File",
-				"logFormat":  fileFormat,
-				"allFormats": allFormats,
-				"active":     logFile != nil,
+				"logFormat":  logMgr.FileFormat(),
+				"allFormats": logging.AllFormats(),
+				"active":     logMgr.HasLogFile(),
 			}
 
 			if pre != nil {
@@ -167,19 +166,19 @@ func preLogFormatPost(rqst *http.Request, data webData) {
 	formatName := rqst.FormValue("formatName")
 	switch formatName {
 	case "Console":
-		stdFormat = rqst.FormValue("logFormat")
-		setStdFormat()
+		// Assume only legal values can be returned from web page.
+		logMgr.SetStdFormat(rqst.FormValue("logFormat"))
 		if fmtData, ok := data["stdFormat"].(webData); ok {
-			fmtData["logFormat"] = stdFormat
+			fmtData["logFormat"] = logMgr.StdFormat()
 		}
-		data["result"] = []string{"Console log format now " + stdFormat}
+		data["result"] = []string{"Console log format now " + logMgr.StdFormat()}
 	case "File":
-		fileFormat = rqst.FormValue("logFormat")
-		setFileFormat()
+		// Assume only legal values can be returned from web page.
+		logMgr.SetFileFormat(rqst.FormValue("logFormat"))
 		if fmtData, ok := data["fileFormat"].(webData); ok {
-			fmtData["logFormat"] = fileFormat
+			fmtData["logFormat"] = logMgr.FileFormat()
 		}
-		data["result"] = []string{"Log file format now " + fileFormat}
+		data["result"] = []string{"Log file format now " + logMgr.FileFormat()}
 	default:
 		log.Error().Str("formatName", formatName).Msg("Unknown format name")
 	}
@@ -199,7 +198,7 @@ func preSendMessagePost(rqst *http.Request, data webData) {
 	}
 	if msg = rqst.FormValue("message"); msg == "" {
 		errs = append(errs, "No message specified")
-	} else if rqst, err := loadMessage(path.Join(messageDir, msg)); err != nil {
+	} else if rqst, err := loadMessage(path.Join(flagSet.MessageDir(), msg)); err != nil {
 		errs = append(errs,
 			fmt.Sprintf("Load request from file %s: %s", msg, err))
 	} else {
