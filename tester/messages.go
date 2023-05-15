@@ -14,6 +14,7 @@ import (
 	"github.com/madkins23/go-utils/log"
 	"github.com/rs/zerolog"
 
+	"github.com/madkins23/lsp-tester/tester/data"
 	"github.com/madkins23/lsp-tester/tester/logging"
 )
 
@@ -49,11 +50,11 @@ func loadMessageFiles() error {
 }
 
 // loadMessage loads the file at the specified path, unmarshals the JSON content,
-// and returns a genericData object.
-func loadMessage(requestPath string) (genericData, error) {
+// and returns a data.AnyMap object.
+func loadMessage(requestPath string) (data.AnyMap, error) {
 	var err error
 	var content []byte
-	var rqst genericData
+	var rqst data.AnyMap
 	if content, err = os.ReadFile(requestPath); err != nil {
 		return nil, fmt.Errorf("read request %s: %w", requestPath, err)
 	}
@@ -63,14 +64,14 @@ func loadMessage(requestPath string) (genericData, error) {
 	return rqst, nil
 }
 
-// sendMessage marshals a genericData object and sends it to the specified connection.
+// sendMessage marshals a data.AnyMap object and sends it to the specified connection.
 // The data object is edited to contain a JSON RPC version, a request ID,
 // and contained relative path fields are replaced with absolute paths.
-func sendMessage(to string, message genericData, connection net.Conn) error {
+func sendMessage(to string, message data.AnyMap, connection net.Conn) error {
 	message["jsonrpc"] = jsonRpcVersion
 	message["id"] = strconv.Itoa(idRandomRange + rand.Intn(idRandomRange))
 
-	if params, ok := message["params"].(genericData); ok {
+	if params, ok := message["params"].(data.AnyMap); ok {
 		if path, found := params["path"]; found {
 			if relPath, ok := path.(string); ok {
 				if absPath, err := filepath.Abs(relPath); err == nil {
@@ -131,13 +132,13 @@ func logMessageTo(from, to, msg string, content []byte, logger *zerolog.Logger, 
 	event := logger.Info().Str("!", direction).Int("#size", len(content))
 
 	if format == logging.FmtKeyword {
-		data := make(genericData)
-		if err := json.Unmarshal(content, &data); err != nil {
+		anyData := make(data.AnyMap)
+		if err := json.Unmarshal(content, &anyData); err != nil {
 			log.Warn().Err(err).Msg("Unmarshal content")
 			// Fall through to end where raw JSON is added.
 		} else {
 			event = logger.Info().Str("!", direction).Int("#size", len(content))
-			if err := keywordMessageFormat(data, event, msg); err != nil {
+			if err := keywordMessageFormat(anyData, event, msg); err != nil {
 				log.Warn().Err(err).Msg("keywordMessageFormat()")
 			}
 			return
@@ -180,12 +181,12 @@ func expirationGC() {
 // Make this a command line flag.
 const maxDisplayLen = 32
 
-func keywordMessageFormat(data genericData, event *zerolog.Event, msg string) error {
+func keywordMessageFormat(data data.AnyMap, event *zerolog.Event, msg string) error {
 	var msgType string
-	if method, found := data.getStringField("method"); found {
+	if method, found := data.GetStringField("method"); found {
 		event.Str("%method", method)
 		msgType = "notification"
-		id, idFound := data.getField("id")
+		id, idFound := data.GetField("id")
 		if idFound {
 			msgType = "request"
 			event.Any("%ID", id)
@@ -196,16 +197,16 @@ func keywordMessageFormat(data genericData, event *zerolog.Event, msg string) er
 				expireGCgo = true
 			}
 		}
-		if params, found := data.getField("params"); found {
+		if params, found := data.GetField("params"); found {
 			addDataToEvent("<", params, event)
 			if idFound {
 				paramsByID[id] = params
 			}
 		}
-	} else if result, found := data.getField("result"); found {
+	} else if result, found := data.GetField("result"); found {
 		msgType = "response"
 		addDataToEvent(">", result, event)
-		id, idFound := data.getField("id")
+		id, idFound := data.GetField("id")
 		if idFound {
 			event.Any("%ID", id)
 			if method, found := methodByID[id]; found {
@@ -218,10 +219,10 @@ func keywordMessageFormat(data genericData, event *zerolog.Event, msg string) er
 				addDataToEvent("<>", params, event)
 			}
 		}
-		if errAny, found := data.getField("error"); found && errAny != nil {
+		if errAny, found := data.GetField("error"); found && errAny != nil {
 			addErrorToEvent(errAny, event)
 		}
-		if position, found := data.getField("position"); found {
+		if position, found := data.GetField("position"); found {
 			addToEventWithLog("position", position, event)
 		}
 	} else {
@@ -269,8 +270,8 @@ func addErrorToEvent(errAny any, event *zerolog.Event) {
 				event.Str("!msg", message)
 			}
 		}
-		if data, found := errHash["data"]; found {
-			addToEventWithLog("!data", data, event)
+		if anyData, found := errHash["data"]; found {
+			addToEventWithLog("!data", anyData, event)
 		}
 	}
 }
