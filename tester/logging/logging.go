@@ -42,9 +42,10 @@ func IsFormat(format string) bool {
 }
 
 // flagSet interface defines required functionality from a flag set.
-// This allows the logging package to utilize a flags.Set object
-// without importing the flags package, which uses the logging package,
-// and would cause an import cycle.
+// The functions in this interface mimic those in flags.Set.
+// This allows the logging package to utilize a flags.Set object's data
+// without importing the flags package itself.
+// This allows the flags package to use the logging package without an import cycle.
 type flagSet interface {
 	LogLevel() zerolog.Level
 	LogStdFormat() string
