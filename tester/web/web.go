@@ -115,7 +115,7 @@ var webPages embed.FS
 var webImages embed.FS
 
 func (s *Server) handleImage(name string) error {
-	if buf, err := webImages.ReadFile("web/image/" + name); err != nil {
+	if buf, err := webImages.ReadFile("image/" + name); err != nil {
 		return fmt.Errorf("read image file %s: %w", name, err)
 	} else {
 		http.HandleFunc("/image/"+name, func(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +135,7 @@ var (
 )
 
 func (s *Server) handlePage(name, url string, startData data.AnyMap, pre, post func(r *http.Request, data data.AnyMap)) error {
-	if tmpl, err := template.ParseFS(webPages, "web/template/skeleton.html", "web/template/"+name+".html"); err != nil {
+	if tmpl, err := template.ParseFS(webPages, "template/skeleton.html", "template/"+name+".html"); err != nil {
 		return fmt.Errorf("parse template files for %s: %w", name, err)
 	} else {
 		http.HandleFunc(url, func(w http.ResponseWriter, r *http.Request) {
@@ -187,23 +187,23 @@ func (s *Server) preMain(rqst *http.Request, data data.AnyMap) {
 	}
 }
 
-func (s *Server) preLogFormatPost(rqst *http.Request, amyMap data.AnyMap) {
+func (s *Server) preLogFormatPost(rqst *http.Request, anyMap data.AnyMap) {
 	formatName := rqst.FormValue("formatName")
 	switch formatName {
 	case "Console":
 		// Assume only legal values can be returned from web page.
 		s.logMgr.SetStdFormat(rqst.FormValue("logFormat"))
-		if fmtData, ok := amyMap["stdFormat"].(data.AnyMap); ok {
+		if fmtData, ok := anyMap["stdFormat"].(data.AnyMap); ok {
 			fmtData["logFormat"] = s.logMgr.StdFormat()
 		}
-		amyMap["result"] = []string{"Console log format now " + s.logMgr.StdFormat()}
+		anyMap["result"] = []string{"Console log format now " + s.logMgr.StdFormat()}
 	case "File":
 		// Assume only legal values can be returned from web page.
 		s.logMgr.SetFileFormat(rqst.FormValue("logFormat"))
-		if fmtData, ok := amyMap["fileFormat"].(data.AnyMap); ok {
+		if fmtData, ok := anyMap["fileFormat"].(data.AnyMap); ok {
 			fmtData["logFormat"] = s.logMgr.FileFormat()
 		}
-		amyMap["result"] = []string{"Log file format now " + s.logMgr.FileFormat()}
+		anyMap["result"] = []string{"Log file format now " + s.logMgr.FileFormat()}
 	default:
 		log.Error().Str("formatName", formatName).Msg("Unknown format name")
 	}

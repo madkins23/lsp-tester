@@ -27,9 +27,9 @@ func NewLogger(flagSet *flags.Set, logMgr *logging.Manager) *Logger {
 }
 
 func (l *Logger) Message(from, to, msg string, content []byte) {
-	l.messageTo(from, to, msg, content, l.logMgr.StdLogger(), l.flags.LogStdFormat())
+	l.messageTo(from, to, msg, content, l.logMgr.StdLogger(), l.logMgr.StdFormat())
 	if l.logMgr.HasLogFile() {
-		l.messageTo(from, to, msg, content, l.logMgr.FileLogger(), l.flags.LogFileFormat())
+		l.messageTo(from, to, msg, content, l.logMgr.FileLogger(), l.logMgr.FileFormat())
 	}
 }
 

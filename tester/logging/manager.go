@@ -61,15 +61,15 @@ type Manager struct {
 	fileLogger       zerolog.Logger
 	stdFormat        string
 	fileFormat       string
-	logFile          *os.File
-	logFormatWriter  map[string]*zerolog.ConsoleWriter
+	stdFormatWriter  map[string]*zerolog.ConsoleWriter
 	fileFormatWriter map[string]*zerolog.ConsoleWriter
+	logFile          *os.File
 }
 
 func NewManager(flags flagSet) (*Manager, error) {
 	mgr := &Manager{
 		flags:            flags,
-		logFormatWriter:  make(map[string]*zerolog.ConsoleWriter, 2),
+		stdFormatWriter:  make(map[string]*zerolog.ConsoleWriter, 2),
 		fileFormatWriter: make(map[string]*zerolog.ConsoleWriter, 2),
 	}
 
@@ -111,10 +111,10 @@ func NewManager(flags flagSet) (*Manager, error) {
 			}
 		}
 	}
-	mgr.logFormatWriter[FmtDefault] = &zerolog.ConsoleWriter{
+	mgr.stdFormatWriter[FmtDefault] = &zerolog.ConsoleWriter{
 		Out: os.Stderr, TimeFormat: "15:04:05",
 	}
-	mgr.logFormatWriter[FmtExpand] = &zerolog.ConsoleWriter{
+	mgr.stdFormatWriter[FmtExpand] = &zerolog.ConsoleWriter{
 		Out: os.Stderr, TimeFormat: "15:04:05",
 		FieldsExclude: []string{"msg"},
 		FormatExtra:   formatMsgJSON,
@@ -154,9 +154,9 @@ func (m *Manager) SetStdFormat(format string) {
 		case FmtDefault:
 			fallthrough
 		case FmtKeyword:
-			m.stdLogger = m.plainLogger.Output(*m.logFormatWriter[FmtDefault])
+			m.stdLogger = m.plainLogger.Output(*m.stdFormatWriter[FmtDefault])
 		case FmtExpand:
-			m.stdLogger = m.plainLogger.Output(*m.logFormatWriter[FmtExpand])
+			m.stdLogger = m.plainLogger.Output(*m.stdFormatWriter[FmtExpand])
 		case FmtJSON:
 			m.stdLogger = m.plainLogger.Output(os.Stderr)
 		default:
