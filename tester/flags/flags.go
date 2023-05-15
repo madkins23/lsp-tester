@@ -21,6 +21,7 @@ type Set struct {
 	webPort       uint
 	messageDir    string
 	requestPath   string
+	maxFieldLen   uint
 	logLevel      zerolog.Level
 	logLevelStr   string
 	logFilePath   string
@@ -44,6 +45,7 @@ func NewSet() *Set {
 	set.StringVar(&set.logFilePath, "logFile", "", "Log file path")
 	set.BoolVar(&set.logFileAppend, "fileAppend", false, "Append to any pre-existing log file")
 	set.StringVar(&set.logFileFormat, "fileFormat", logging.FmtDefault, "Log file format")
+	set.UintVar(&set.maxFieldLen, "maxFieldLen", 32, "Maximum length of fields to display")
 	return set
 }
 
@@ -163,8 +165,12 @@ func (s *Set) LogLevel() zerolog.Level {
 	return s.logLevel
 }
 
-func (s *Set) ServerPort() uint {
-	return s.serverPort
+func (s *Set) MaxFieldDisplayLength() int {
+	return int(s.maxFieldLen)
+}
+
+func (s *Set) ServerPort() int {
+	return int(s.serverPort)
 }
 
 func (s *Set) WebPort() uint {

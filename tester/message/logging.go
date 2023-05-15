@@ -1,13 +1,8 @@
-package main
+package message
 
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
-	"net"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,96 +10,26 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/madkins23/lsp-tester/tester/data"
+	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/logging"
 )
 
-const (
-	idRandomRange   = 1000
-	msgHeaderFormat = "Content-Length: %d\r\n\r\n%s"
-	jsonRpcVersion  = "2.0"
-)
-
-var (
-	messages []string
-)
-
-// loadMessageFiles loads all message files in the message directory.
-// The message directory is specified by the messageDir global variable.
-// The message file data is stored in the messages global variable as strings.
-func loadMessageFiles() error {
-	messageDir := flagSet.MessageDir()
-	if messageDir == "" {
-		// Nothing to do here
-	} else if entries, err := os.ReadDir(messageDir); err != nil {
-		messages = make([]string, 0)
-		return fmt.Errorf("read message directory %s: %w", messageDir, err)
-	} else {
-		messages = make([]string, 0, len(entries))
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				messages = append(messages, entry.Name())
-			}
-		}
-	}
-	return nil
+type Logger struct {
+	flags  *flags.Set
+	logMgr *logging.Manager
 }
 
-// loadMessage loads the file at the specified path, unmarshals the JSON content,
-// and returns a data.AnyMap object.
-func loadMessage(requestPath string) (data.AnyMap, error) {
-	var err error
-	var content []byte
-	var rqst data.AnyMap
-	if content, err = os.ReadFile(requestPath); err != nil {
-		return nil, fmt.Errorf("read request %s: %w", requestPath, err)
+func NewLogger(flagSet *flags.Set, logMgr *logging.Manager) *Logger {
+	return &Logger{
+		flags:  flagSet,
+		logMgr: logMgr,
 	}
-	if err = json.Unmarshal(content, &rqst); err != nil {
-		return nil, fmt.Errorf("unmarshal request: %w", err)
-	}
-	return rqst, nil
 }
 
-// sendMessage marshals a data.AnyMap object and sends it to the specified connection.
-// The data object is edited to contain a JSON RPC version, a request ID,
-// and contained relative path fields are replaced with absolute paths.
-func sendMessage(to string, message data.AnyMap, connection net.Conn) error {
-	message["jsonrpc"] = jsonRpcVersion
-	message["id"] = strconv.Itoa(idRandomRange + rand.Intn(idRandomRange))
-
-	if params, ok := message["params"].(data.AnyMap); ok {
-		if path, found := params["path"]; found {
-			if relPath, ok := path.(string); ok {
-				if absPath, err := filepath.Abs(relPath); err == nil {
-					params["path"] = absPath
-				}
-			}
-		}
-	}
-
-	if content, err := json.Marshal(message); err != nil {
-		return fmt.Errorf("marshal request: %w", err)
-	} else if err := sendContent(to, content, connection); err != nil {
-		return fmt.Errorf("send content: %w", err)
-	}
-	return nil
-}
-
-// sendContent sends byte array content to the specified connection.
-// A message header is provided before the content.
-func sendContent(to string, content []byte, connection net.Conn) error {
-	logMessage("tester", to, "Send", content)
-	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
-	if _, err := connection.Write([]byte(message)); err != nil {
-		return fmt.Errorf("write content: %w", err)
-	}
-
-	return nil
-}
-
-func logMessage(from, to, msg string, content []byte) {
-	logMessageTo(from, to, msg, content, logMgr.StdLogger(), flagSet.LogStdFormat())
-	if logMgr.HasLogFile() {
-		logMessageTo(from, to, msg, content, logMgr.FileLogger(), flagSet.LogFileFormat())
+func (l *Logger) Message(from, to, msg string, content []byte) {
+	l.messageTo(from, to, msg, content, l.logMgr.StdLogger(), l.flags.LogStdFormat())
+	if l.logMgr.HasLogFile() {
+		l.messageTo(from, to, msg, content, l.logMgr.FileLogger(), l.flags.LogFileFormat())
 	}
 }
 
@@ -113,7 +38,7 @@ const (
 	rightArrow = "-->"
 )
 
-func logMessageTo(from, to, msg string, content []byte, logger *zerolog.Logger, format string) {
+func (l *Logger) messageTo(from, to, msg string, content []byte, logger *zerolog.Logger, format string) {
 	var direction string
 	if strings.HasPrefix(from, "client") {
 		direction = from + rightArrow + to
@@ -138,7 +63,7 @@ func logMessageTo(from, to, msg string, content []byte, logger *zerolog.Logger, 
 			// Fall through to end where raw JSON is added.
 		} else {
 			event = logger.Info().Str("!", direction).Int("#size", len(content))
-			if err := keywordMessageFormat(anyData, event, msg); err != nil {
+			if err := l.keywordMessageFormat(anyData, event, msg); err != nil {
 				log.Warn().Err(err).Msg("keywordMessageFormat()")
 			}
 			return
@@ -178,10 +103,7 @@ func expirationGC() {
 	}
 }
 
-// Make this a command line flag.
-const maxDisplayLen = 32
-
-func keywordMessageFormat(data data.AnyMap, event *zerolog.Event, msg string) error {
+func (l *Logger) keywordMessageFormat(data data.AnyMap, event *zerolog.Event, msg string) error {
 	var msgType string
 	if method, found := data.GetStringField("method"); found {
 		event.Str("%method", method)
@@ -198,36 +120,36 @@ func keywordMessageFormat(data data.AnyMap, event *zerolog.Event, msg string) er
 			}
 		}
 		if params, found := data.GetField("params"); found {
-			addDataToEvent("<", params, event)
+			l.addDataToEvent("<", params, event)
 			if idFound {
 				paramsByID[id] = params
 			}
 		}
 	} else if result, found := data.GetField("result"); found {
 		msgType = "response"
-		addDataToEvent(">", result, event)
+		l.addDataToEvent(">", result, event)
 		id, idFound := data.GetField("id")
 		if idFound {
 			event.Any("%ID", id)
 			if method, found := methodByID[id]; found {
 				if method == "$/alive/listPackages" {
-					addDataToEvent(">", result, event)
+					l.addDataToEvent(">", result, event)
 				}
 				event.Str("<>method", method)
 			}
 			if params, found := paramsByID[id]; found {
-				addDataToEvent("<>", params, event)
+				l.addDataToEvent("<>", params, event)
 			}
 		}
 		if errAny, found := data.GetField("error"); found && errAny != nil {
-			addErrorToEvent(errAny, event)
+			l.addErrorToEvent(errAny, event)
 		}
 		if position, found := data.GetField("position"); found {
-			addToEventWithLog("position", position, event)
+			l.addToEventWithLog("position", position, event)
 		}
 	} else {
 		msgType = "unknown"
-		if str, err := marshalAny(data); err != nil {
+		if str, err := marshalAny(data, l.flags.MaxFieldDisplayLength()); err != nil {
 			return fmt.Errorf("marshalAny: %w", err)
 		} else {
 			event.Str("msg", str)
@@ -238,10 +160,10 @@ func keywordMessageFormat(data data.AnyMap, event *zerolog.Event, msg string) er
 	return nil
 }
 
-func addDataToEvent(prefix string, data any, event *zerolog.Event) {
+func (l *Logger) addDataToEvent(prefix string, data any, event *zerolog.Event) {
 	if hash, ok := data.(map[string]interface{}); ok {
 		for key, item := range hash {
-			addToEventWithLog(prefix+key, item, event)
+			l.addToEventWithLog(prefix+key, item, event)
 		}
 	} else if array, ok := data.([]any); ok {
 		label := "rqst-params"
@@ -250,13 +172,13 @@ func addDataToEvent(prefix string, data any, event *zerolog.Event) {
 		} else if prefix == ">" {
 			label = "result"
 		}
-		addToEventWithLog(label, array, event)
+		l.addToEventWithLog(label, array, event)
 	} else if data != nil {
 		log.Warn().Msg("Data not a map in addDataToEvent()")
 	}
 }
 
-func addErrorToEvent(errAny any, event *zerolog.Event) {
+func (l *Logger) addErrorToEvent(errAny any, event *zerolog.Event) {
 	if errAny == nil {
 		return
 	} else if errHash, ok := errAny.(map[string]interface{}); ok {
@@ -271,24 +193,24 @@ func addErrorToEvent(errAny any, event *zerolog.Event) {
 			}
 		}
 		if anyData, found := errHash["data"]; found {
-			addToEventWithLog("!data", anyData, event)
+			l.addToEventWithLog("!data", anyData, event)
 		}
 	}
 }
 
-func addToEventWithLog(label string, item any, event *zerolog.Event) {
-	if found, err := addToEvent(label, item, event); err != nil {
+func (l *Logger) addToEventWithLog(label string, item any, event *zerolog.Event) {
+	if found, err := l.addToEvent(label, item, event); err != nil {
 		log.Warn().Err(err).Msgf("Adding %s to event", label)
 	} else if !found {
 		log.Debug().Msgf("Empty %s", label)
 	}
 }
 
-func addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
+func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 	added := true
 	if text, ok := item.(string); ok {
-		if len(text) > maxDisplayLen {
-			text = text[:maxDisplayLen]
+		if len(text) > l.flags.MaxFieldDisplayLength() {
+			text = text[:l.flags.MaxFieldDisplayLength()]
 		}
 		if text == "" {
 			return false, nil
@@ -306,7 +228,7 @@ func addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 	} else if array, ok := item.([]any); ok && len(array) > 0 {
 		event.Int(label+"#", len(array))
 		for _, element := range array {
-			if done, err := addToEvent(label+"[0]", element, event); err != nil {
+			if done, err := l.addToEvent(label+"[0]", element, event); err != nil {
 				return false, fmt.Errorf("addToEvent: %w", err)
 			} else if done {
 				// Only shows first item in array.
@@ -315,7 +237,7 @@ func addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 		}
 	}
 	if !added {
-		if str, err := marshalAny(item); err != nil {
+		if str, err := marshalAny(item, l.flags.MaxFieldDisplayLength()); err != nil {
 			return false, fmt.Errorf("marshalAny: %w", err)
 		} else {
 			event.Str(label, str)
@@ -325,7 +247,7 @@ func addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 	return true, nil
 }
 
-func marshalAny(item any) (string, error) {
+func marshalAny(item any, maxDisplayLen int) (string, error) {
 	if jsonBytes, err := json.Marshal(item); err != nil {
 		return "", fmt.Errorf("marshal JSON: %w", err)
 	} else {

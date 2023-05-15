@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"context"
@@ -9,42 +9,69 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"sync"
 
 	"github.com/madkins23/go-utils/log"
 
+	"github.com/madkins23/lsp-tester/tester/data"
+	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/logging"
+	"github.com/madkins23/lsp-tester/tester/message"
+	"github.com/madkins23/lsp-tester/tester/network"
 )
 
-type webData map[string]any
+type Server struct {
+	flags    *flags.Set
+	listener *network.Listener
+	logMgr   *logging.Manager
+	msgLgr   *message.Logger
+	waiter   *sync.WaitGroup
+	messages *message.Files
+}
 
-func webServer() {
-	port := flagSet.WebPort()
+func NewWebServer(
+	flags *flags.Set, listener *network.Listener,
+	logMgr *logging.Manager, msgLgr *message.Logger, waiter *sync.WaitGroup) *Server {
+	return &Server{
+		flags:    flags,
+		listener: listener,
+		logMgr:   logMgr,
+		msgLgr:   msgLgr,
+		waiter:   waiter,
+	}
+}
+
+func (s *Server) Serve() {
+	port := s.flags.WebPort()
 	log.Info().Uint("port", port).Msg("Web server starting")
 	defer log.Info().Uint("port", port).Msg("Web server finished")
 
-	waiter.Add(1)
-	defer waiter.Done()
+	s.waiter.Add(1)
+	defer s.waiter.Done()
 
 	log.Info().Str("URL", "http://localhost:"+strconv.Itoa(int(port))).Msg("Web service")
 
-	if err := loadMessageFiles(); err != nil {
-		log.Warn().Err(err).Str("dir", flagSet.MessageDir()).Msg("Unable to read message directory")
+	if messageDir := s.flags.MessageDir(); messageDir != "" {
+		s.messages = message.NewFiles(s.flags)
+		if err := s.messages.LoadMessageFiles(); err != nil {
+			log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
+		}
 	}
 
-	data := webData{
-		"messages":  messages,
-		"receivers": receivers,
+	anyData := data.AnyMap{
+		"messages":  s.messages.List(),
+		"receivers": network.Receivers(),
 	}
 
 	const configurePageError = "Configuring page handler"
 	const configureImageError = "Configuring image handler"
 
-	if err := handlePage("main", "/", data, preMain, nil); err != nil {
+	if err := s.handlePage("main", "/", anyData, s.preMain, nil); err != nil {
 		log.Error().Err(err).Str("page", "main").Msg(configurePageError)
 	}
 
 	for _, name := range []string{"home.png", "bomb.png"} {
-		if err := handleImage(name); err != nil {
+		if err := s.handleImage(name); err != nil {
 			log.Error().Err(err).Str("image", name).Msg(configureImageError)
 		}
 	}
@@ -56,13 +83,11 @@ func webServer() {
 	exitChannel := make(chan bool)
 	go func() {
 		<-exitChannel
-		if listener != nil {
-			if err := listener.Close(); err != nil {
-				log.Error().Err(err).Msg("Error killing listener")
-			}
+		if s.listener != nil {
+			s.listener.Close()
 		}
-		for _, rcvr := range receivers {
-			if err := rcvr.kill(); err != nil {
+		for _, rcvr := range network.Receivers() {
+			if err := rcvr.Kill(); err != nil {
 				log.Error().Err(err).Msg("Error killing receiver")
 			}
 		}
@@ -70,9 +95,9 @@ func webServer() {
 			log.Error().Err(err).Msg("Error shutting down web server")
 		}
 	}()
-	if err := handlePage("exit", "/exit", nil, func(_ *http.Request, data webData) {
-		data["exit"] = true
-	}, func(_ *http.Request, _ webData) {
+	if err := s.handlePage("exit", "/exit", nil, func(_ *http.Request, anyData data.AnyMap) {
+		anyData["exit"] = true
+	}, func(_ *http.Request, _ data.AnyMap) {
 		exitChannel <- true
 	}); err != nil {
 		log.Error().Err(err).Str("page", "exit").Msg(configurePageError)
@@ -83,13 +108,13 @@ func webServer() {
 	}
 }
 
-//go:embed web/template
+//go:embed template
 var webPages embed.FS
 
-//go:embed web/image
+//go:embed image
 var webImages embed.FS
 
-func handleImage(name string) error {
+func (s *Server) handleImage(name string) error {
 	if buf, err := webImages.ReadFile("web/image/" + name); err != nil {
 		return fmt.Errorf("read image file %s: %w", name, err)
 	} else {
@@ -109,88 +134,88 @@ var (
 	lastTarget  string
 )
 
-func handlePage(name, url string, startData webData, pre, post func(r *http.Request, data webData)) error {
+func (s *Server) handlePage(name, url string, startData data.AnyMap, pre, post func(r *http.Request, data data.AnyMap)) error {
 	if tmpl, err := template.ParseFS(webPages, "web/template/skeleton.html", "web/template/"+name+".html"); err != nil {
 		return fmt.Errorf("parse template files for %s: %w", name, err)
 	} else {
 		http.HandleFunc(url, func(w http.ResponseWriter, r *http.Request) {
-			data := make(webData)
+			anyData := make(data.AnyMap)
 			for key, value := range startData {
-				data[key] = value
+				anyData[key] = value
 			}
-			data["lastMessage"] = lastMessage
-			data["lastTarget"] = lastTarget
-			data["page"] = name
-			data["stdFormat"] = webData{
+			anyData["lastMessage"] = lastMessage
+			anyData["lastTarget"] = lastTarget
+			anyData["page"] = name
+			anyData["stdFormat"] = data.AnyMap{
 				"formatName": "Console",
-				"logFormat":  logMgr.StdFormat(),
+				"logFormat":  s.logMgr.StdFormat(),
 				"allFormats": logging.AllFormats(),
 				"active":     true,
 			}
-			data["fileFormat"] = webData{
+			anyData["fileFormat"] = data.AnyMap{
 				"formatName": "File",
-				"logFormat":  logMgr.FileFormat(),
+				"logFormat":  s.logMgr.FileFormat(),
 				"allFormats": logging.AllFormats(),
-				"active":     logMgr.HasLogFile(),
+				"active":     s.logMgr.HasLogFile(),
 			}
 
 			if pre != nil {
-				pre(r, data)
+				pre(r, anyData)
 			}
-			if err := tmpl.ExecuteTemplate(w, "skeleton", data); err != nil {
+			if err := tmpl.ExecuteTemplate(w, "skeleton", anyData); err != nil {
 				log.Error().Err(err).Str("page", name).Msg("Error serving page")
 				http.Error(w,
 					http.StatusText(http.StatusInternalServerError),
 					http.StatusInternalServerError)
 			}
 			if post != nil {
-				post(r, data)
+				post(r, anyData)
 			}
 		})
 		return nil
 	}
 }
 
-func preMain(rqst *http.Request, data webData) {
+func (s *Server) preMain(rqst *http.Request, data data.AnyMap) {
 	if rqst.Method == "POST" {
 		switch rqst.FormValue("form") {
 		case "send":
-			preSendMessagePost(rqst, data)
+			s.preSendMessagePost(rqst, data)
 		case "format":
-			preLogFormatPost(rqst, data)
+			s.preLogFormatPost(rqst, data)
 		}
 	}
 }
 
-func preLogFormatPost(rqst *http.Request, data webData) {
+func (s *Server) preLogFormatPost(rqst *http.Request, amyMap data.AnyMap) {
 	formatName := rqst.FormValue("formatName")
 	switch formatName {
 	case "Console":
 		// Assume only legal values can be returned from web page.
-		logMgr.SetStdFormat(rqst.FormValue("logFormat"))
-		if fmtData, ok := data["stdFormat"].(webData); ok {
-			fmtData["logFormat"] = logMgr.StdFormat()
+		s.logMgr.SetStdFormat(rqst.FormValue("logFormat"))
+		if fmtData, ok := amyMap["stdFormat"].(data.AnyMap); ok {
+			fmtData["logFormat"] = s.logMgr.StdFormat()
 		}
-		data["result"] = []string{"Console log format now " + logMgr.StdFormat()}
+		amyMap["result"] = []string{"Console log format now " + s.logMgr.StdFormat()}
 	case "File":
 		// Assume only legal values can be returned from web page.
-		logMgr.SetFileFormat(rqst.FormValue("logFormat"))
-		if fmtData, ok := data["fileFormat"].(webData); ok {
-			fmtData["logFormat"] = logMgr.FileFormat()
+		s.logMgr.SetFileFormat(rqst.FormValue("logFormat"))
+		if fmtData, ok := amyMap["fileFormat"].(data.AnyMap); ok {
+			fmtData["logFormat"] = s.logMgr.FileFormat()
 		}
-		data["result"] = []string{"Log file format now " + logMgr.FileFormat()}
+		amyMap["result"] = []string{"Log file format now " + s.logMgr.FileFormat()}
 	default:
 		log.Error().Str("formatName", formatName).Msg("Unknown format name")
 	}
 }
 
-func preSendMessagePost(rqst *http.Request, data webData) {
+func (s *Server) preSendMessagePost(rqst *http.Request, data data.AnyMap) {
 	var errs = make([]string, 0, 2)
 	var msg, tgt string
-	var rcvr *receiver
+	var rcvr *network.Receiver
 	if tgt = rqst.FormValue("target"); tgt == "" {
 		errs = append(errs, "No target specified")
-	} else if rcvr = receivers[tgt]; rcvr == nil {
+	} else if rcvr = network.GetReceiver(tgt); rcvr == nil {
 		errs = append(errs, "No such receiver")
 	} else {
 		lastTarget = tgt
@@ -198,14 +223,14 @@ func preSendMessagePost(rqst *http.Request, data webData) {
 	}
 	if msg = rqst.FormValue("message"); msg == "" {
 		errs = append(errs, "No message specified")
-	} else if rqst, err := loadMessage(path.Join(flagSet.MessageDir(), msg)); err != nil {
+	} else if rqst, err := message.LoadMessage(path.Join(s.flags.MessageDir(), msg)); err != nil {
 		errs = append(errs,
 			fmt.Sprintf("Load request from file %s: %s", msg, err))
 	} else {
 		lastMessage = msg
 		data["lastMessage"] = lastMessage
 		if rcvr != nil {
-			if err = sendMessage(tgt, rqst, rcvr.conn); err != nil {
+			if err = message.SendMessage(tgt, rqst, rcvr.Connection(), s.msgLgr); err != nil {
 				errs = append(errs,
 					fmt.Sprintf("Send msg to server %s: %s", tgt, err))
 			}

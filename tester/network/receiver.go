@@ -1,4 +1,4 @@
-package main
+package network
 
 import (
 	"bufio"
@@ -8,10 +8,13 @@ import (
 	"net"
 	"regexp"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/madkins23/go-utils/log"
+
+	"github.com/madkins23/lsp-tester/tester/message"
 )
 
 const (
@@ -23,55 +26,74 @@ var (
 )
 
 var (
-	receivers = make(map[string]*receiver)
+	receivers = make(map[string]*Receiver)
 )
 
-type receiver struct {
-	to    string
-	conn  net.Conn
-	other *receiver
+func GetReceiver(name string) *Receiver {
+	return receivers[name]
 }
 
-func startReceiver(to string, connection net.Conn) (*receiver, error) {
+func Receivers() map[string]*Receiver {
+	return receivers
+}
+
+type Receiver struct {
+	to     string
+	conn   net.Conn
+	other  *Receiver
+	msgLgr *message.Logger
+	waiter *sync.WaitGroup
+}
+
+func NewReceiver(to string, connection net.Conn, msgLgr *message.Logger, waiter *sync.WaitGroup) *Receiver {
 	if to == "client" {
 		to += "-" + strconv.Itoa(int(sequence.Add(1)))
 	}
-	rcvr := &receiver{
-		to:   to,
-		conn: connection,
+	return &Receiver{
+		to:     to,
+		conn:   connection,
+		msgLgr: msgLgr,
+		waiter: waiter,
 	}
-	receivers[to] = rcvr
+}
+
+func (r *Receiver) Connection() net.Conn {
+	return r.conn
+}
+
+func (r *Receiver) Start() error {
 	ready := make(chan bool)
-	go rcvr.receive(&ready)
+	go r.Receive(&ready)
 	for i := 0; i < 5; i++ {
 		select {
 		case <-ready:
-			log.Debug().Str("to", to).Msg("Connected")
-			return rcvr, nil
+			log.Debug().Str("to", r.to).Msg("Connected")
+			return nil
 		case <-time.After(time.Second):
-			log.Debug().Str("to", to).Msg("Connecting...")
+			log.Debug().Str("to", r.to).Msg("Connecting...")
 		}
 	}
-	return nil, fmt.Errorf("connection to %s not made", to)
+	return fmt.Errorf("connection to %s not made", r.to)
 }
 
-func (r *receiver) kill() error {
-	return r.conn.Close()
+func (r *Receiver) SetOther(other *Receiver) {
+	r.other = other
 }
 
-func (r *receiver) receive(ready *chan bool) {
+func (r *Receiver) Receive(ready *chan bool) {
 	log.Info().Str("to", r.to).Msg("Receiver starting")
 	defer log.Info().Str("to", r.to).Msg("Receiver finished")
 
-	waiter.Add(1)
-	defer waiter.Done()
-
+	receivers[r.to] = r
 	defer delete(receivers, r.to)
+
+	r.waiter.Add(1)
+	defer r.waiter.Done()
 
 	content := make([]byte, 1048576) // 1 Mb
 	reader := bufio.NewReader(r.conn)
 
-	// Notify caller receiver is about to do its thing.
+	// Notify caller Receiver is about to do its thing.
 	*ready <- true
 
 	for {
@@ -113,7 +135,7 @@ func (r *receiver) receive(ready *chan bool) {
 			log.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
 			content = content[:contentLen]
-			logMessage(r.to, "tester", "Rcvd", content)
+			r.msgLgr.Message(r.to, "tester", "Rcvd", content)
 			// TODO: What if there are multiple clients?
 			// How do we know which one server should send to?
 			if r.other != nil {
@@ -125,10 +147,14 @@ func (r *receiver) receive(ready *chan bool) {
 	}
 }
 
-func (r *receiver) sendContent(content []byte) error {
-	if err := sendContent(r.to, content, r.conn); err != nil {
+func (r *Receiver) sendContent(content []byte) error {
+	if err := message.SendContent(r.to, content, r.conn, r.msgLgr); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	} else {
 		return nil
 	}
+}
+
+func (r *Receiver) Kill() error {
+	return r.conn.Close()
 }
