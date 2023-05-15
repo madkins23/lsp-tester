@@ -433,24 +433,19 @@ The default value is `info`.
 
 This application started as a simple one file project and
 mutated over time to include a lot of other functionality.
-Consequently, the application structure is less rigorous than the author would like.
-In particular:
-* there is no packaging of subcomponents and
-* there are an awful lot of global variables scattered hither and yon.
-
-In the fullness of time the application may be refactored to reflect
-modern software engineering precepts and style.
-On the other hand, it is still a fairly small chunk of code and not _too_ terribly hard to
-[grok](https://en.wikipedia.org/wiki/Grok).
-Remember, [time is fleeting](https://www.youtube.com/watch?v=umj0gu5nEGs)[^4] and 
-we all have other stuff to do. ;-)
+The codebase has been refactored to make it more modular but
+there are no tests whatsoever.
 
 Feel free to fork the code and rewrite it if you desire.
 Please don't send any massive refactoring PRs, no matter how tempting.
-PRs with small changes may be welcome if the author has the time and is in the mood.
-Just like with any other open source application.
+PRs with small changes may be welcome if the author has the time and is in the mood
+(just like most other open source applications).
+Remember, [time is fleeting](https://www.youtube.com/watch?v=umj0gu5nEGs)[^4] and
+we all have other stuff to do. ;-)
 
 Thanks for listening.
 
-[^4]: It turns out the "pelvic thrust" is a good way to unkink one's back after
-leaning forward in one's chair for hours peering into a computer screen. ;-)
+[^4]: It turns out the "pelvic thrust"
+(as in the dance, no double entendre intended here)
+is a good way to unkink one's back after
+leaning forward in one's chair for hours  peering into a computer screen. ;-)
