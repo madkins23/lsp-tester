@@ -222,9 +222,14 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 	} else if boolean, ok := item.(bool); ok {
 		event.Bool(label, boolean)
 	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
-		// Most useful hash data is handled in other functions,
-		// just let this fall through and be shown as JSON.
-		added = false
+		itemAny := data.MakeAnyMap(hash)
+		if uri, found := itemAny.GetStringField("uri"); found {
+			event.Str(label, uri)
+		} else {
+			// Most useful hash data is handled in other functions,
+			// just let this fall through and be shown as JSON.
+			added = false
+		}
 	} else if array, ok := item.([]any); ok && len(array) > 0 {
 		event.Int(label+"#", len(array))
 		for _, element := range array {
@@ -245,6 +250,15 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 		}
 	}
 	return true, nil
+}
+
+func (l *Logger) addTextDocumentItemToEvent(label string, item map[string]interface{}, event *zerolog.Event) bool {
+	itemAny := data.MakeAnyMap(item)
+	if uri, found := itemAny.GetStringField("uri"); found {
+		event.Str(label, uri)
+		return true
+	}
+	return false
 }
 
 func marshalAny(item any, maxDisplayLen int) (string, error) {
