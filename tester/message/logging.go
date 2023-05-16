@@ -209,9 +209,13 @@ func (l *Logger) addToEventWithLog(label string, item any, event *zerolog.Event)
 var (
 	dontTruncate = map[string]bool{
 		"path": true,
+		"uri":  true,
 	}
 	useStringField = []string{
 		"uri",
+	}
+	subField = []string{
+		"textDocument",
 	}
 )
 
@@ -233,19 +237,27 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 	} else if boolean, ok := item.(bool); ok {
 		event.Bool(label, boolean)
 	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
-		// Most useful hash data is handled in other functions,
-		// by default just let this fall through and be shown as JSON.
+		// Let this fall through and be shown as JSON by default
 		added = false
-		// There may, however, be a useful field.
+		// Look for a useful field to replace the JSON.
 		for _, fld := range useStringField {
 			if field, found := hash[fld]; found {
 				if fldStr, ok := field.(string); ok {
-					if !dontTruncate[fldStr] && len(fldStr) > l.flags.MaxFieldDisplayLength() {
+					if !dontTruncate[fld] && len(fldStr) > l.flags.MaxFieldDisplayLength() {
 						fldStr = fldStr[:l.flags.MaxFieldDisplayLength()]
 					}
 					event.Str(label, fldStr)
 					added = true
 					break
+				}
+			}
+		}
+		// Look for a useful field that is a hash that can be further processed.
+		for _, fld := range subField {
+			if field, found := hash[fld]; found {
+				var err error
+				if added, err = l.addToEvent(label, field, event); err != nil {
+					return false, fmt.Errorf("process sub-field: %w", err)
 				}
 			}
 		}
