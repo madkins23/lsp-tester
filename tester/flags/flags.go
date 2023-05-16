@@ -28,6 +28,7 @@ type Set struct {
 	logFileAppend bool
 	logFileFormat string
 	logStdFormat  string
+	logMsgTwice   bool
 }
 
 func NewSet() *Set {
@@ -46,6 +47,7 @@ func NewSet() *Set {
 	set.BoolVar(&set.logFileAppend, "fileAppend", false, "Append to any pre-existing log file")
 	set.StringVar(&set.logFileFormat, "fileFormat", logging.FmtDefault, "Log file format")
 	set.UintVar(&set.maxFieldLen, "maxFieldLen", 32, "Maximum length of fields to display")
+	set.BoolVar(&set.logMsgTwice, "logMsgTwice", false, "Log each message twice with tester in the middle")
 	return set
 }
 
@@ -183,4 +185,8 @@ func (s *Set) MessageDir() string {
 
 func (s *Set) RequestPath() string {
 	return s.requestPath
+}
+
+func (s *Set) LogMessageTwice() bool {
+	return s.logMsgTwice
 }

@@ -1,7 +1,3 @@
-* Working on refactoring
-  + flags and logging pulled out
-  ! simple server eval finds request method and params,
-    nexus mode doesn't seem to
 * Continue to pull fields out of messages on simple-messages branch
   - (even though they're now keyword messages)
   - e.g. textDocument

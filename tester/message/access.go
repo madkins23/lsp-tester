@@ -52,7 +52,7 @@ func SendMessage(to string, message data.AnyMap, connection net.Conn, msgLgr *Lo
 
 	if content, err := json.Marshal(message); err != nil {
 		return fmt.Errorf("marshal request: %w", err)
-	} else if err := SendContent(to, content, connection, msgLgr); err != nil {
+	} else if err := SendContent("tester", to, content, connection, msgLgr); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	}
 	return nil
@@ -60,8 +60,8 @@ func SendMessage(to string, message data.AnyMap, connection net.Conn, msgLgr *Lo
 
 // SendContent sends byte array content to the specified connection.
 // A message header is provided before the content.
-func SendContent(to string, content []byte, connection net.Conn, msgLgr *Logger) error {
-	msgLgr.Message("tester", to, "Send", content)
+func SendContent(from, to string, content []byte, connection net.Conn, msgLgr *Logger) error {
+	msgLgr.Message(from, to, "Send", content)
 	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
 	if _, err := connection.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)

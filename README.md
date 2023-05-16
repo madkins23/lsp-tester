@@ -124,14 +124,10 @@ In this case a blank line will be emitted to separate the new messages from the 
 
 Specific conventions used in all output formats:
 
-| Example             | Definition                                     |
-|---------------------|------------------------------------------------|
-| `!=tester-->server` | Direction of message [^1]                      |
-| `#size=125`         | Size of content from message header            |
-
-[^1]: In Nexus mode there will be two log items for each message.
-The first will be from the client or server to the tester,
-the second will be from the tester to the server or client as appropriate
+| Example             | Definition                          |
+|---------------------|-------------------------------------|
+| `!=client-->server` | Direction of message                |
+| `#size=125`         | Size of content from message header |
 
 In all formats but `json` these will be at the left of every line
 after the timestamp, log level, and message text.
@@ -139,6 +135,8 @@ In `json` mode these fields will still be present but not as easy to find.
 
 The message direction is configured so that the `client`, when present, is on the left and
 the `server`, when present, is on the right.
+If either the client or the server is absent any messages will replace the missing
+entity with `tester`, representing `lsp-tester` itself.
 
 In the examples below the use of `logFormat=<format>` always imply
 the same behavior for log files by using `fileFormat=<format>`.
@@ -225,21 +223,21 @@ in which the previous log data would show as:
 This mode attempts to pull out key fields and only show small blocks of meaningful data.
 Specific conventions used in this format:
 
-| Example             | Definition                                     |
-|---------------------|------------------------------------------------|
-| `$Type=request`     | Type of message [^2]                           |
-| `%ID=81`            | Message ID                                     |
-| `%method=$/alive/eval` | Method for request                             |
-| `<text="(+ 2 (/ 15 5))` | Parameter with name prefixed by `<`            |
-| `>text=5` | Result item with name prefixed by `>`           |
-| `<>method=$/alive/eval` | Method from request provided with response [^3] |
-| `<>text="(+ 2 (/ 15 5))"` | Parameter from request provided with response [^3] |                                 
+| Example                   | Definition                                         |
+|---------------------------|----------------------------------------------------|
+| `$Type=request`           | Type of message [^1]                               |
+| `%ID=81`                  | Message ID                                         |
+| `%method=$/alive/eval`    | Method for request                                 |
+| `<text="(+ 2 (/ 15 5))`   | Parameter with name prefixed by `<`                |
+| `>text=5`                 | Result item with name prefixed by `>`              |
+| `<>method=$/alive/eval`   | Method from request provided with response [^2]    |
+| `<>text="(+ 2 (/ 15 5))"` | Parameter from request provided with response [^2] |                                 
 
-[^2]: The `$Type` of message is derived from the available fields.
+[^1]: The `$Type` of message is derived from the available fields.
 There is no specific "type" field in the Language Server Protocol
 so this derivation is somewhat fuzzy and may be wrong sometimes.
 
-[^3]: Method and parameter data from requests is stored by ID,
+[^2]: Method and parameter data from requests is stored by ID,
 looked up when a response message is found with the same ID, and
 added to the log entry for the response using the `<>` prefix.
 This data is not actually in the response message.
@@ -386,20 +384,21 @@ This scenario handles two problems:
 
 ## Command Line Flags
 
-| Flag          | Type     | Description                                         |
-|---------------|----------|-----------------------------------------------------|
-| `-host`       | `string` | LSP server host address (default `"127.0.0.1"`)     |
-| `-clientPort` | `uint`   | Port number served for extension client to contact  |
-| `-serverPort` | `uint`   | Port number on which to contact LSP server          |
-| `-webPort`    | `uint`   | Port for web server for interactive control         |
-| `-logLevel`   | `string` | Set the log level (see below      |
-| `-logFormat`  | `string` | Format value for console output (see below)         |
-| `-logFile`    | `string` | Log file path (default no log file)                 |
-| `-fileAppend` | `bool`   | Append to any pre-existing log file                 |
-| `-fileFormat` | `string` | Format value for log file (see below)               |
-| `-request`    | `string` | Path to file to be sent when connected (client mode) |
-| `-messages`   | `string` | Path to directory of message files (for Web server) |
-| `-help`       | `bool`   | Show usage and flags                                |
+| Flag            | Type     | Description                                          |
+|-----------------|----------|------------------------------------------------------|
+| `-host`         | `string` | LSP server host address (default `"127.0.0.1"`)      |
+| `-clientPort`   | `uint`   | Port number served for extension client to contact   |
+| `-serverPort`   | `uint`   | Port number on which to contact LSP server           |
+| `-webPort`      | `uint`   | Port for web server for interactive control          |
+| `-logLevel`     | `string` | Set the log level (see below                         |
+| `-logFormat`    | `string` | Format value for console output (see below)          |
+| `-logMsgTwice`  | `bool`   | Show each message twice with `tester` in the middle. |
+| `-logFile`      | `string` | Log file path (default no log file)                  |
+| `-fileAppend`   | `bool`   | Append to any pre-existing log file                  |
+| `-fileFormat`   | `string` | Format value for log file (see below)                |
+| `-request`      | `string` | Path to file to be sent when connected (client mode) |
+| `-messages`     | `string` | Path to directory of message files (for Web server)  |
+| `-help`         | `bool`   | Show usage and flags                                 |
 
 Boolean flags (e.g. `-fileAppend` and `-help`) do not require a value.
 The presence of such a flag indicates a value of `true`.
@@ -429,6 +428,21 @@ Choices are specified in the following table.
 Each value includes itself and all messages above it in the table.
 The default value is `info`.
 
+The `logMsgTwice` flag converts
+```
+17:29:31 INF Send !=client-1-->server #size=122 $Type=request %ID=8 %method=$/alive/eval <package=cl-user <storeResult=true <text="(+ 2 (/ 15 5))"
+17:29:31 INF Send !=client-1<--server #size=46 $Type=response %ID=8 <>method=$/alive/eval <>package=cl-user <>storeResult=true <>text="(+ 2 (/ 15 5))" >text=5
+```
+to
+```
+17:36:34 INF Rcvd !=client-1-->tester #size=122 $Type=request %ID=8 %method=$/alive/eval <package=cl-user <storeResult=true <text="(+ 2 (/ 15 5))"
+17:36:34 INF Send !=tester-->server #size=122 $Type=request %ID=8 %method=$/alive/eval <package=cl-user <storeResult=true <text="(+ 2 (/ 15 5))"
+17:36:34 INF Rcvd !=tester<--server #size=46 $Type=response %ID=8 <>method=$/alive/eval <>package=cl-user <>storeResult=true <>text="(+ 2 (/ 15 5))" >text=5
+17:36:34 INF Send !=client-1<--tester #size=46 $Type=response %ID=8 <>method=$/alive/eval <>package=cl-user <>storeResult=true <>text="(+ 2 (/ 15 5))" >text=5
+```
+to show the role of `lsp-tester` in passing messages back and forth.
+This may not be very useful except when demonstrating that `lsp-tester` is not functional.
+
 ## Development Notes
 
 This application started as a simple one file project and
@@ -440,12 +454,12 @@ Feel free to fork the code and rewrite it if you desire.
 Please don't send any massive refactoring PRs, no matter how tempting.
 PRs with small changes may be welcome if the author has the time and is in the mood
 (just like most other open source applications).
-Remember, [time is fleeting](https://www.youtube.com/watch?v=umj0gu5nEGs)[^4] and
+Remember, [time is fleeting](https://www.youtube.com/watch?v=umj0gu5nEGs)[^3] and
 we all have other stuff to do. ;-)
 
 Thanks for listening.
 
-[^4]: It turns out the "pelvic thrust"
+[^3]: It turns out the "pelvic thrust"
 (as in the dance, no double entendre intended here)
 is a good way to unkink one's back after
 leaning forward in one's chair for hours  peering into a computer screen. ;-)

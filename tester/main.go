@@ -49,7 +49,7 @@ func main() {
 			return
 		}
 
-		client = network.NewReceiver("server", connection, msgLogger, &waiter)
+		client = network.NewReceiver("server", flagSet, connection, msgLogger, &waiter)
 		if err = client.Start(); err != nil {
 			log.Error().Err(err).Msg("Unable to start Receiver")
 			return
@@ -70,7 +70,7 @@ func main() {
 		} else {
 			go listener.ListenForClient(func(conn net.Conn) {
 				log.Info().Msg("Accepting client")
-				server = network.NewReceiver("client", conn, msgLogger, &waiter)
+				server = network.NewReceiver("client", flagSet, conn, msgLogger, &waiter)
 				if err = server.Start(); err != nil {
 					log.Error().Err(err).Msg("Unable to start Receiver")
 					return

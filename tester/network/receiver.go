@@ -14,6 +14,7 @@ import (
 
 	"github.com/madkins23/go-utils/log"
 
+	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/message"
 )
 
@@ -38,6 +39,7 @@ func Receivers() map[string]*Receiver {
 }
 
 type Receiver struct {
+	flags  *flags.Set
 	to     string
 	conn   net.Conn
 	other  *Receiver
@@ -45,11 +47,12 @@ type Receiver struct {
 	waiter *sync.WaitGroup
 }
 
-func NewReceiver(to string, connection net.Conn, msgLgr *message.Logger, waiter *sync.WaitGroup) *Receiver {
+func NewReceiver(to string, flags *flags.Set, connection net.Conn, msgLgr *message.Logger, waiter *sync.WaitGroup) *Receiver {
 	if to == "client" {
 		to += "-" + strconv.Itoa(int(sequence.Add(1)))
 	}
 	return &Receiver{
+		flags:  flags,
 		to:     to,
 		conn:   connection,
 		msgLgr: msgLgr,
@@ -135,11 +138,17 @@ func (r *Receiver) Receive(ready *chan bool) {
 			log.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
 			content = content[:contentLen]
-			r.msgLgr.Message(r.to, "tester", "Rcvd", content)
-			// TODO: What if there are multiple clients?
-			// How do we know which one server should send to?
-			if r.other != nil {
-				if err := r.other.sendContent(content); err != nil {
+			if r.other == nil {
+				r.msgLgr.Message(r.to, "tester", "Rcvd", content)
+			} else {
+				// TODO: What if there are multiple clients?
+				// How do we know which one server should send to?
+				from := r.to
+				if r.flags.LogMessageTwice() {
+					from = "tester"
+					r.msgLgr.Message(r.to, "tester", "Rcvd", content)
+				}
+				if err := r.other.sendContent(from, content); err != nil {
 					log.Error().Err(err).Msg("Sending outgoing message")
 				}
 			}
@@ -147,8 +156,8 @@ func (r *Receiver) Receive(ready *chan bool) {
 	}
 }
 
-func (r *Receiver) sendContent(content []byte) error {
-	if err := message.SendContent(r.to, content, r.conn, r.msgLgr); err != nil {
+func (r *Receiver) sendContent(from string, content []byte) error {
+	if err := message.SendContent(from, r.to, content, r.conn, r.msgLgr); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	} else {
 		return nil
