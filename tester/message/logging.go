@@ -206,6 +206,15 @@ func (l *Logger) addToEventWithLog(label string, item any, event *zerolog.Event)
 	}
 }
 
+var (
+	dontTruncate = map[string]bool{
+		"path": true,
+	}
+	useStringField = []string{
+		"uri",
+	}
+)
+
 func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 	added := true
 	if text, ok := item.(string); ok {
@@ -224,13 +233,21 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 	} else if boolean, ok := item.(bool); ok {
 		event.Bool(label, boolean)
 	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
-		itemAny := data.MakeAnyMap(hash)
-		if uri, found := itemAny.GetStringField("uri"); found {
-			event.Str(label, uri)
-		} else {
-			// Most useful hash data is handled in other functions,
-			// just let this fall through and be shown as JSON.
-			added = false
+		// Most useful hash data is handled in other functions,
+		// by default just let this fall through and be shown as JSON.
+		added = false
+		// There may, however, be a useful field.
+		for _, fld := range useStringField {
+			if field, found := hash[fld]; found {
+				if fldStr, ok := field.(string); ok {
+					if !dontTruncate[fldStr] && len(fldStr) > l.flags.MaxFieldDisplayLength() {
+						fldStr = fldStr[:l.flags.MaxFieldDisplayLength()]
+					}
+					event.Str(label, fldStr)
+					added = true
+					break
+				}
+			}
 		}
 	} else if array, ok := item.([]any); ok && len(array) > 0 {
 		event.Int(label+"#", len(array))
@@ -252,15 +269,6 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 		}
 	}
 	return true, nil
-}
-
-func (l *Logger) addTextDocumentItemToEvent(label string, item map[string]interface{}, event *zerolog.Event) bool {
-	itemAny := data.MakeAnyMap(item)
-	if uri, found := itemAny.GetStringField("uri"); found {
-		event.Str(label, uri)
-		return true
-	}
-	return false
 }
 
 func marshalAny(item any, maxDisplayLen int) (string, error) {
