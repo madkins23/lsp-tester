@@ -209,8 +209,10 @@ func (l *Logger) addToEventWithLog(label string, item any, event *zerolog.Event)
 func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
 	added := true
 	if text, ok := item.(string); ok {
-		if len(text) > l.flags.MaxFieldDisplayLength() {
-			text = text[:l.flags.MaxFieldDisplayLength()]
+		if !strings.HasSuffix(label, "path") {
+			if len(text) > l.flags.MaxFieldDisplayLength() {
+				text = text[:l.flags.MaxFieldDisplayLength()]
+			}
 		}
 		if text == "" {
 			return false, nil
