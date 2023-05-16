@@ -5,16 +5,6 @@ const maxDisplayLen = 32
 
 type AnyMap map[string]any
 
-func MakeAnyMap(someMap map[string]interface{}) AnyMap {
-	anyMap := make(AnyMap)
-	for key, value := range someMap {
-		if value != nil {
-			anyMap[key] = value.(any)
-		}
-	}
-	return anyMap
-}
-
 func (am AnyMap) HasField(name string) bool {
 	_, found := am[name]
 	return found
