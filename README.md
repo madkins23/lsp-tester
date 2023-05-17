@@ -442,24 +442,3 @@ to
 ```
 to show the role of `lsp-tester` in passing messages back and forth.
 This may not be very useful except when demonstrating that `lsp-tester` is not functional.
-
-## Development Notes
-
-This application started as a simple one file project and
-mutated over time to include a lot of other functionality.
-The codebase has been refactored to make it more modular but
-there are no tests whatsoever.
-
-Feel free to fork the code and rewrite it if you desire.
-Please don't send any massive refactoring PRs, no matter how tempting.
-PRs with small changes may be welcome if the author has the time and is in the mood
-(just like most other open source applications).
-Remember, [time is fleeting](https://www.youtube.com/watch?v=umj0gu5nEGs)[^3] and
-we all have other stuff to do. ;-)
-
-Thanks for listening.
-
-[^3]: It turns out the "pelvic thrust"
-(as in the dance, no double entendre intended here)
-is a good way to unkink one's back after
-leaning forward in one's chair for hours  peering into a computer screen. ;-)
