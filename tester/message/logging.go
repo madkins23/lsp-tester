@@ -147,6 +147,9 @@ func (l *Logger) keywordMessageFormat(data data.AnyMap, event *zerolog.Event, ms
 		if position, found := data.GetField("position"); found {
 			l.addToEventWithLog("position", position, event)
 		}
+	} else if errAny, found := data.GetField("error"); found && errAny != nil {
+		msgType = "notification"
+		l.addErrorToEvent(errAny, event)
 	} else {
 		msgType = "unknown"
 		if str, err := marshalAny(data, l.flags.MaxFieldDisplayLength()); err != nil {
@@ -173,8 +176,14 @@ func (l *Logger) addDataToEvent(prefix string, data any, event *zerolog.Event) {
 			label = "result"
 		}
 		l.addToEventWithLog(label, array, event)
+	} else if boolean, ok := data.(bool); ok {
+		event.Bool(prefix, boolean)
 	} else if data != nil {
-		log.Warn().Msg("Data not a map in addDataToEvent()")
+		if str, err := marshalAny(data, l.flags.MaxFieldDisplayLength()); err != nil {
+			log.Warn().Err(err).Msg("Unable to marshal crap in addDataToEvent()")
+		} else {
+			event.Str("data", str).Msg("Data not a map")
+		}
 	}
 }
 
@@ -220,7 +229,8 @@ var (
 )
 
 func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool, error) {
-	added := true
+	var added = true
+	var err error
 	if text, ok := item.(string); ok {
 		if !strings.HasSuffix(label, "path") {
 			if len(text) > l.flags.MaxFieldDisplayLength() {
@@ -237,29 +247,8 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 	} else if boolean, ok := item.(bool); ok {
 		event.Bool(label, boolean)
 	} else if hash, ok := item.(map[string]interface{}); ok && len(hash) > 0 {
-		// Let this fall through and be shown as JSON by default
-		added = false
-		// Look for a useful field to replace the JSON.
-		for _, fld := range useStringField {
-			if field, found := hash[fld]; found {
-				if fldStr, ok := field.(string); ok {
-					if !dontTruncate[fld] && len(fldStr) > l.flags.MaxFieldDisplayLength() {
-						fldStr = fldStr[:l.flags.MaxFieldDisplayLength()]
-					}
-					event.Str(label, fldStr)
-					added = true
-					break
-				}
-			}
-		}
-		// Look for a useful field that is a hash that can be further processed.
-		for _, fld := range subField {
-			if field, found := hash[fld]; found {
-				var err error
-				if added, err = l.addToEvent(label, field, event); err != nil {
-					return false, fmt.Errorf("process sub-field: %w", err)
-				}
-			}
+		if added, err = l.addHashFieldToEvent(label, hash, event); err != nil {
+			return added, err
 		}
 	} else if array, ok := item.([]any); ok && len(array) > 0 {
 		event.Int(label+"#", len(array))
@@ -277,10 +266,36 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 			return false, fmt.Errorf("marshalAny: %w", err)
 		} else {
 			event.Str(label, str)
-			added = true
 		}
 	}
 	return true, nil
+}
+
+func (l *Logger) addHashFieldToEvent(label string, hash map[string]interface{}, event *zerolog.Event) (bool, error) {
+	added := false
+	// Look for a useful field to replace the JSON.
+	for _, fld := range useStringField {
+		if field, found := hash[fld]; found {
+			if fldStr, ok := field.(string); ok {
+				if !dontTruncate[fld] && len(fldStr) > l.flags.MaxFieldDisplayLength() {
+					fldStr = fldStr[:l.flags.MaxFieldDisplayLength()]
+				}
+				event.Str(label, fldStr)
+				added = true
+				break
+			}
+		}
+	}
+	// Look for a useful field that is a hash that can be further processed.
+	for _, fld := range subField {
+		if field, found := hash[fld]; found {
+			var err error
+			if added, err = l.addToEvent(label, field, event); err != nil {
+				return false, fmt.Errorf("process sub-field: %w", err)
+			}
+		}
+	}
+	return added, nil
 }
 
 func marshalAny(item any, maxDisplayLen int) (string, error) {
