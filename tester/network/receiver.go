@@ -100,33 +100,7 @@ func (r *Receiver) Receive(ready *chan bool) {
 	*ready <- true
 
 	for {
-		var contentLen = 0
-		for {
-			lineBytes, isPrefix, err := reader.ReadLine()
-			if err != nil {
-				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
-					return
-				}
-				log.Error().Err(err).Msg("Read first line")
-				continue
-			} else if isPrefix {
-				log.Error().Err(err).Msg("Only beginning of header line read")
-				continue
-			}
-			if len(lineBytes) == 0 {
-				break
-			}
-			re := regexp.MustCompile(contentLengthMatch)
-			matches := re.FindStringSubmatch(string(lineBytes))
-			if len(matches) < 2 {
-				continue
-			}
-			contentLen, err = strconv.Atoi(matches[1])
-			if err != nil {
-				log.Error().Err(err).Msgf("Content length '%s' not integer", matches[0])
-				continue
-			}
-		}
+		contentLen := r.receiveMsg(reader)
 		if contentLen == 0 {
 			log.Error().Msg("header had no content length")
 			continue
@@ -154,6 +128,37 @@ func (r *Receiver) Receive(ready *chan bool) {
 			}
 		}
 	}
+}
+
+func (r *Receiver) receiveMsg(reader *bufio.Reader) int {
+	var contentLen = 0
+	for {
+		lineBytes, isPrefix, err := reader.ReadLine()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+				return 0
+			}
+			log.Error().Err(err).Msg("Read first line")
+			continue
+		} else if isPrefix {
+			log.Error().Err(err).Msg("Only beginning of header line read")
+			continue
+		}
+		if len(lineBytes) == 0 {
+			break
+		}
+		re := regexp.MustCompile(contentLengthMatch)
+		matches := re.FindStringSubmatch(string(lineBytes))
+		if len(matches) < 2 {
+			continue
+		}
+		contentLen, err = strconv.Atoi(matches[1])
+		if err != nil {
+			log.Error().Err(err).Msgf("Content length '%s' not integer", matches[0])
+			continue
+		}
+	}
+	return contentLen
 }
 
 func (r *Receiver) sendContent(from string, content []byte) error {
