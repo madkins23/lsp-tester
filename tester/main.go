@@ -122,7 +122,9 @@ func logVersion() {
 			target = arch
 		}
 		if target != "" {
-			event.Str("Target", target).Msg("Version")
+			event.Str("Target", target)
 		}
+		event.Str("Main", info.Main.Version)
+		event.Msg("Version")
 	}
 }
