@@ -29,6 +29,7 @@ type Set struct {
 	logFileFormat string
 	logStdFormat  string
 	logMsgTwice   bool
+	version       bool
 }
 
 func NewSet() *Set {
@@ -48,6 +49,7 @@ func NewSet() *Set {
 	set.StringVar(&set.logFileFormat, "fileFormat", logging.FmtDefault, "Log file format")
 	set.UintVar(&set.maxFieldLen, "maxFieldLen", 32, "Maximum length of fields to display")
 	set.BoolVar(&set.logMsgTwice, "logMsgTwice", false, "Log each message twice with tester in the middle")
+	set.BoolVar(&set.version, "version", true, "Show lsp-tester version")
 	return set
 }
 
@@ -210,4 +212,8 @@ func (s *Set) fixRequestPath() error {
 		}
 	}
 	return nil
+}
+
+func (s *Set) Version() bool {
+	return s.version
 }

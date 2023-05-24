@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"os"
+	"runtime/debug"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -36,6 +38,9 @@ func main() {
 
 	log.Info().Msg("LSP starting")
 	defer log.Info().Msg("LSP finished")
+	if flagSet.Version() {
+		logVersion()
+	}
 
 	msgLogger = message.NewLogger(flagSet, logMgr)
 
@@ -90,4 +95,37 @@ func main() {
 	}
 
 	waiter.Wait()
+}
+
+func logVersion() {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		var target, arch string
+		event := log.Info().Str("Go", info.GoVersion)
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "GOOS":
+				target = setting.Value
+			case "GOARCH":
+				arch = setting.Value
+			case "vcs":
+				event.Str("VCS", setting.Value)
+			case "vcs.revision":
+				event.Str("Revision", setting.Value)
+			case "vcs.time":
+				event.Str("When", setting.Value)
+			case "vcs.modified":
+				event.Str("Dirty", setting.Value)
+			}
+		}
+		if target != "" && arch != "" {
+			target += " " + arch
+		} else if target == "" && arch != "" {
+			target = arch
+		}
+		if target != "" {
+			event.Str("Target", target).Msg("Version")
+		}
+
+		fmt.Print(info)
+	}
 }
