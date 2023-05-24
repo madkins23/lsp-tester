@@ -401,10 +401,8 @@ This scenario handles two problems:
 | `-version`      | `bool`   | Show version of application                          |
 | `-help`         | `bool`   | Show usage and flags                                 |
 
-Boolean flags (e.g. `-fileAppend` and `-help`) do not require a value.
+Boolean flags (e.g. `-version` and `-help`) do not require a value.
 The presence of such a flag indicates a value of `true`.
-In the case of `-version`, which defaults to `true`,
-it is necessary to specify `-version=false` to turn it off.
 
 Format values can be set separately for console output and optional log file.
 

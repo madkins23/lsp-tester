@@ -49,7 +49,7 @@ func NewSet() *Set {
 	set.StringVar(&set.logFileFormat, "fileFormat", logging.FmtDefault, "Log file format")
 	set.UintVar(&set.maxFieldLen, "maxFieldLen", 32, "Maximum length of fields to display")
 	set.BoolVar(&set.logMsgTwice, "logMsgTwice", false, "Log each message twice with tester in the middle")
-	set.BoolVar(&set.version, "version", true, "Show lsp-tester version")
+	set.BoolVar(&set.version, "version", false, "Show lsp-tester version")
 	return set
 }
 

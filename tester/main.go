@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"runtime/debug"
@@ -112,9 +111,9 @@ func logVersion() {
 			case "vcs.revision":
 				event.Str("Revision", setting.Value)
 			case "vcs.time":
-				event.Str("When", setting.Value)
+				event.Str("Revised", setting.Value)
 			case "vcs.modified":
-				event.Str("Dirty", setting.Value)
+				event.Str("Modified", setting.Value)
 			}
 		}
 		if target != "" && arch != "" {
@@ -125,7 +124,5 @@ func logVersion() {
 		if target != "" {
 			event.Str("Target", target).Msg("Version")
 		}
-
-		fmt.Print(info)
 	}
 }
