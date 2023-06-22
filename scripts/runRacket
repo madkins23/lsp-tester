@@ -1,0 +1,5 @@
+#!/bin/bash
+#
+# Run the tester agains racket-langserver so magic-racket configuration is simpler.
+
+go run tester/main.go -logLevel=debug -command="racket --lib racket-langserver" "$@"

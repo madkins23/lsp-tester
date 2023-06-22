@@ -3,12 +3,12 @@ package main
 import (
 	"net"
 	"os"
-	"os/exec"
 	"runtime/debug"
 	"sync"
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/madkins23/lsp-tester/tester/command"
 	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/logging"
 	"github.com/madkins23/lsp-tester/tester/lsp"
@@ -53,15 +53,18 @@ func main() {
 			log.Warn().Msg("--process set, --serverPort will be ignored")
 		}
 
-		path, args := flagSet.Command()
-		cmd := exec.Command(path, args...)
-		if err := cmd.Run(); err != nil {
-			log.Error().Err(err).Msg("Unable to run command")
+		if process, err := command.NewProcess("server", flagSet, msgLogger, &waiter); err != nil {
+			log.Error().Err(err).Msg("Unable to create Process receiver")
 			return
+		} else if err = process.Start(); err != nil {
+			log.Error().Err(err).Msg("Unable to start Process receiver")
+			return
+		} else {
+			sendRequest(flagSet, process, msgLogger)
 		}
 	} else {
-		var client *lsp.Receiver
-		var server *lsp.Receiver
+		var client lsp.Receiver
+		var server lsp.Receiver
 
 		if flagSet.ServerPort() > 0 {
 			connection, err := network.ConnectToLSP(flagSet)
@@ -72,17 +75,11 @@ func main() {
 
 			client = network.NewReceiver("server", flagSet, connection, msgLogger, &waiter)
 			if err = client.Start(); err != nil {
-				log.Error().Err(err).Msg("Unable to start Receiver")
+				log.Error().Err(err).Msg("Unable to start ReceiverBase")
 				return
 			}
 
-			if flagSet.RequestPath() != "" {
-				if rqst, err := message.LoadMessage(flagSet.RequestPath()); err != nil {
-					log.Error().Err(err).Msgf("Load request from file %s", flagSet.RequestPath())
-				} else if err := message.SendMessage("server", rqst, client.Writer(), msgLogger); err != nil {
-					log.Error().Err(err).Msgf("Send message from file %s", flagSet.RequestPath())
-				}
-			}
+			sendRequest(flagSet, client, msgLogger)
 		}
 
 		if flagSet.ClientPort() > 0 {
@@ -93,7 +90,7 @@ func main() {
 					log.Info().Msg("Accepting client")
 					server = network.NewReceiver("client", flagSet, conn, msgLogger, &waiter)
 					if err = server.Start(); err != nil {
-						log.Error().Err(err).Msg("Unable to start Receiver")
+						log.Error().Err(err).Msg("Unable to start ReceiverBase")
 						return
 					}
 					if client != nil {
@@ -106,8 +103,8 @@ func main() {
 		}
 	}
 
+	webSrvr := web.NewWebServer(flagSet, listener, logMgr, msgLogger, &waiter)
 	if flagSet.WebPort() > 0 {
-		webSrvr := web.NewWebServer(flagSet, listener, logMgr, msgLogger, &waiter)
 		go webSrvr.Serve()
 	}
 
@@ -144,5 +141,15 @@ func logVersion() {
 		}
 		event.Str("Main", info.Main.Version)
 		event.Msg("Version")
+	}
+}
+
+func sendRequest(flags *flags.Set, receiver lsp.Receiver, msgLgr *message.Logger) {
+	if flags.RequestPath() != "" {
+		if rqst, err := message.LoadMessage(flags.RequestPath()); err != nil {
+			log.Error().Err(err).Msgf("Load request from file %s", flags.RequestPath())
+		} else if err := receiver.SendMessage("server", rqst, msgLgr); err != nil {
+			log.Error().Err(err).Msgf("Send message from file %s", flags.RequestPath())
+		}
 	}
 }

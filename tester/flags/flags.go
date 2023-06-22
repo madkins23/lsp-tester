@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/madkins23/go-utils/path"
 	"github.com/rs/zerolog"
 
 	"github.com/madkins23/lsp-tester/tester/logging"
@@ -19,6 +21,8 @@ type Set struct {
 	*flag.FlagSet
 	hostAddress   string
 	command       string
+	commandPath   string
+	commandArgs   []string
 	clientPort    uint
 	serverPort    uint
 	webPort       uint
@@ -66,14 +70,19 @@ var logLevels = map[string]zerolog.Level{
 }
 
 func (s *Set) Parse(args []string) error {
-	if err := s.FlagSet.Parse(args); err != nil {
-		return err
+	var err error
+	if err = s.FlagSet.Parse(args); err != nil {
+		return fmt.Errorf("parse flags: %w", err)
 	}
 
 	if s.command != "" {
-		fileInfo, err := os.Stat(s.command)
+		parts := regexp.MustCompile("\\s+").Split(s.command, -1)
+		if s.commandPath, err = exec.LookPath(parts[0]); err != nil {
+			return fmt.Errorf("get path for command: %w", err)
+		}
+		fileInfo, err := os.Stat(s.commandPath)
 		if err != nil {
-			return fmt.Errorf("stat %s: %w", s.command, err)
+			return fmt.Errorf("stat %s: %w", s.commandPath, err)
 		}
 		mode := fileInfo.Mode()
 		if !((mode.IsRegular()) || (uint32(mode&fs.ModeSymlink) == 0)) {
@@ -81,23 +90,29 @@ func (s *Set) Parse(args []string) error {
 		} else if uint32(mode&0111) == 0 {
 			return fmt.Errorf("file %s is not executable", s.command)
 		}
+		s.commandArgs = make([]string, len(parts)-1)
+		for i, arg := range parts[1:] {
+			if s.commandArgs[i], err = path.FixHomePath(arg); err != nil {
+				return fmt.Errorf("fix home path '%s': %w", arg, err)
+			}
+		}
 	}
 
 	if err := s.fixMessageDirectory(); err != nil {
-		return err
+		return fmt.Errorf("fix message directory: %w", err)
 	}
 
 	if err := s.fixRequestPath(); err != nil {
-		return err
+		return fmt.Errorf("fix request path: %w", err)
+	}
+
+	if err := s.fixLogFilePath(); err != nil {
+		return fmt.Errorf("fix log file path: %w", err)
 	}
 
 	var found bool
 	if s.logLevel, found = logLevels[s.logLevelStr]; !found {
 		return fmt.Errorf("log level '%s' does not exist", s.logLevelStr)
-	}
-
-	if err := s.fixLogFilePath(); err != nil {
-		return err
 	}
 
 	formatErrors := make([]error, 0, 2)
@@ -119,8 +134,7 @@ func (s *Set) HasCommand() bool {
 }
 
 func (s *Set) Command() (string, []string) {
-	parts := regexp.MustCompile("\\w").Split(s.command, -1)
-	return parts[0], parts[1:]
+	return s.commandPath, s.commandArgs
 }
 
 func (s *Set) CommandArgs() string {
@@ -181,6 +195,10 @@ func (s *Set) LogMessageTwice() bool {
 
 func (s *Set) fixLogFilePath() error {
 	if s.logFilePath != "" {
+		var err error
+		if s.logFilePath, err = path.FixHomePath(s.logFilePath); err != nil {
+			return fmt.Errorf("fix home path '%s': %w", s.logFilePath, err)
+		}
 		logPathDir := filepath.Dir(s.logFilePath)
 		if stat, err := os.Stat(logPathDir); err != nil {
 			return fmt.Errorf("verify existence of log path directory: %w", err)
@@ -194,9 +212,9 @@ func (s *Set) fixLogFilePath() error {
 func (s *Set) fixMessageDirectory() error {
 	if s.messageDir != "" {
 		// Clean up and verify the message directory path.
-		if strings.HasPrefix(s.messageDir, "~/") {
-			dirname, _ := os.UserHomeDir()
-			s.messageDir = filepath.Join(dirname, s.messageDir[2:])
+		var err error
+		if s.messageDir, err = path.FixHomePath(s.messageDir); err != nil {
+			return fmt.Errorf("fix home path '%s': %w", s.messageDir, err)
 		}
 		if stat, err := os.Stat(s.messageDir); err != nil {
 			return fmt.Errorf("verify existence of message directory: %w", err)
@@ -213,9 +231,11 @@ func (s *Set) fixRequestPath() error {
 		// There are various possible interpretations to check.
 		possiblePaths := make([]string, 0, 3)
 		if strings.HasPrefix(s.requestPath, "~/") {
-			// Only one possible path in the tilde case.
-			dirname, _ := os.UserHomeDir()
-			possiblePaths = append(possiblePaths, filepath.Join(dirname, s.requestPath[2:]))
+			if fixedPath, err := path.FixHomePath(s.requestPath); err != nil {
+				return fmt.Errorf("fix home path '%s': %w", s.requestPath, err)
+			} else {
+				possiblePaths = append(possiblePaths, fixedPath)
+			}
 		} else {
 			// Request path might be relative to messages path.
 			if s.messageDir != "" {

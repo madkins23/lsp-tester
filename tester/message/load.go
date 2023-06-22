@@ -1,9 +1,11 @@
 package message
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
+	"github.com/madkins23/lsp-tester/tester/data"
 	"github.com/madkins23/lsp-tester/tester/flags"
 )
 
@@ -41,4 +43,21 @@ func (f *Files) LoadMessageFiles() error {
 
 func (f *Files) List() []string {
 	return f.messages
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// LoadMessage loads the file at the specified path, unmarshals the JSON content,
+// and returns a data.AnyMap object.
+func LoadMessage(requestPath string) (data.AnyMap, error) {
+	var err error
+	var content []byte
+	var rqst data.AnyMap
+	if content, err = os.ReadFile(requestPath); err != nil {
+		return nil, fmt.Errorf("read request %s: %w", requestPath, err)
+	}
+	if err = json.Unmarshal(content, &rqst); err != nil {
+		return nil, fmt.Errorf("unmarshal request: %w", err)
+	}
+	return rqst, nil
 }

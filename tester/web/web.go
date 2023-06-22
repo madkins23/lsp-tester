@@ -213,7 +213,7 @@ func (s *Server) preLogFormatPost(rqst *http.Request, anyMap data.AnyMap) {
 func (s *Server) preSendMessagePost(rqst *http.Request, data data.AnyMap) {
 	var errs = make([]string, 0, 2)
 	var msg, tgt string
-	var rcvr *lsp.Receiver
+	var rcvr lsp.Receiver
 	if tgt = rqst.FormValue("target"); tgt == "" {
 		errs = append(errs, "No target specified")
 	} else if rcvr = lsp.GetReceiver(tgt); rcvr == nil {
@@ -231,7 +231,7 @@ func (s *Server) preSendMessagePost(rqst *http.Request, data data.AnyMap) {
 		lastMessage = msg
 		data["lastMessage"] = lastMessage
 		if rcvr != nil {
-			if err = message.SendMessage(tgt, rqst, rcvr.Writer(), s.msgLgr); err != nil {
+			if err = rcvr.SendMessage(tgt, rqst, s.msgLgr); err != nil {
 				errs = append(errs,
 					fmt.Sprintf("Send msg to server %s: %s", tgt, err))
 			}
