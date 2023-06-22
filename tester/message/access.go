@@ -3,8 +3,8 @@ package message
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,7 +36,7 @@ func LoadMessage(requestPath string) (data.AnyMap, error) {
 // SendMessage marshals a data.AnyMap object and sends it to the specified connection.
 // The data object is edited to contain a JSON RPC version, a request ID,
 // and contained relative path fields are replaced with absolute paths.
-func SendMessage(to string, message data.AnyMap, connection net.Conn, msgLgr *Logger) error {
+func SendMessage(to string, message data.AnyMap, writer io.Writer, msgLgr *Logger) error {
 	message["jsonrpc"] = jsonRpcVersion
 	message["id"] = strconv.Itoa(idRandomRange + rand.Intn(idRandomRange))
 
@@ -52,7 +52,7 @@ func SendMessage(to string, message data.AnyMap, connection net.Conn, msgLgr *Lo
 
 	if content, err := json.Marshal(message); err != nil {
 		return fmt.Errorf("marshal request: %w", err)
-	} else if err := SendContent("tester", to, content, connection, msgLgr); err != nil {
+	} else if err := SendContent("tester", to, content, writer, msgLgr); err != nil {
 		return fmt.Errorf("send content: %w", err)
 	}
 	return nil
@@ -60,10 +60,10 @@ func SendMessage(to string, message data.AnyMap, connection net.Conn, msgLgr *Lo
 
 // SendContent sends byte array content to the specified connection.
 // A message header is provided before the content.
-func SendContent(from, to string, content []byte, connection net.Conn, msgLgr *Logger) error {
+func SendContent(from, to string, content []byte, writer io.Writer, msgLgr *Logger) error {
 	msgLgr.Message(from, to, "Send", content)
 	message := fmt.Sprintf(msgHeaderFormat, len(content), string(content))
-	if _, err := connection.Write([]byte(message)); err != nil {
+	if _, err := writer.Write([]byte(message)); err != nil {
 		return fmt.Errorf("write content: %w", err)
 	}
 

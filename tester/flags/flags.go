@@ -4,8 +4,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -16,6 +18,7 @@ import (
 type Set struct {
 	*flag.FlagSet
 	hostAddress   string
+	command       string
 	clientPort    uint
 	serverPort    uint
 	webPort       uint
@@ -37,6 +40,7 @@ func NewSet() *Set {
 		FlagSet: flag.NewFlagSet("lsp-tester", flag.ContinueOnError),
 	}
 	set.StringVar(&set.hostAddress, "host", "127.0.0.1", "Host address")
+	set.StringVar(&set.command, "command", "", "LSP server command")
 	set.UintVar(&set.clientPort, "clientPort", 0, "Port number served for extension to contact")
 	set.UintVar(&set.serverPort, "serverPort", 0, "Port number on which to contact LSP server")
 	set.UintVar(&set.webPort, "webPort", 0, "Web port number to enable web access")
@@ -64,6 +68,19 @@ var logLevels = map[string]zerolog.Level{
 func (s *Set) Parse(args []string) error {
 	if err := s.FlagSet.Parse(args); err != nil {
 		return err
+	}
+
+	if s.command != "" {
+		fileInfo, err := os.Stat(s.command)
+		if err != nil {
+			return fmt.Errorf("stat %s: %w", s.command, err)
+		}
+		mode := fileInfo.Mode()
+		if !((mode.IsRegular()) || (uint32(mode&fs.ModeSymlink) == 0)) {
+			return fmt.Errorf("file %s is not normal or a symlink", s.command)
+		} else if uint32(mode&0111) == 0 {
+			return fmt.Errorf("file %s is not executable", s.command)
+		}
 	}
 
 	if err := s.fixMessageDirectory(); err != nil {
@@ -97,12 +114,25 @@ func (s *Set) Parse(args []string) error {
 	return nil
 }
 
-func (s *Set) HostAddress() string {
-	return s.hostAddress
+func (s *Set) HasCommand() bool {
+	return s.command != ""
+}
+
+func (s *Set) Command() (string, []string) {
+	parts := regexp.MustCompile("\\w").Split(s.command, -1)
+	return parts[0], parts[1:]
+}
+
+func (s *Set) CommandArgs() string {
+	return s.command
 }
 
 func (s *Set) ClientPort() uint {
 	return s.clientPort
+}
+
+func (s *Set) HostAddress() string {
+	return s.hostAddress
 }
 
 func (s *Set) LogFileAppend() bool {

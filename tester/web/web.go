@@ -16,6 +16,7 @@ import (
 	"github.com/madkins23/lsp-tester/tester/data"
 	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/logging"
+	"github.com/madkins23/lsp-tester/tester/lsp"
 	"github.com/madkins23/lsp-tester/tester/message"
 	"github.com/madkins23/lsp-tester/tester/network"
 )
@@ -60,7 +61,7 @@ func (s *Server) Serve() {
 
 	anyData := data.AnyMap{
 		"messages":  s.messages.List(),
-		"receivers": network.Receivers(),
+		"receivers": lsp.Receivers(),
 	}
 
 	const configurePageError = "Configuring page handler"
@@ -86,7 +87,7 @@ func (s *Server) Serve() {
 		if s.listener != nil {
 			s.listener.Close()
 		}
-		for _, rcvr := range network.Receivers() {
+		for _, rcvr := range lsp.Receivers() {
 			if err := rcvr.Kill(); err != nil {
 				log.Error().Err(err).Msg("Error killing receiver")
 			}
@@ -212,10 +213,10 @@ func (s *Server) preLogFormatPost(rqst *http.Request, anyMap data.AnyMap) {
 func (s *Server) preSendMessagePost(rqst *http.Request, data data.AnyMap) {
 	var errs = make([]string, 0, 2)
 	var msg, tgt string
-	var rcvr *network.Receiver
+	var rcvr *lsp.Receiver
 	if tgt = rqst.FormValue("target"); tgt == "" {
 		errs = append(errs, "No target specified")
-	} else if rcvr = network.GetReceiver(tgt); rcvr == nil {
+	} else if rcvr = lsp.GetReceiver(tgt); rcvr == nil {
 		errs = append(errs, "No such receiver")
 	} else {
 		lastTarget = tgt
@@ -230,7 +231,7 @@ func (s *Server) preSendMessagePost(rqst *http.Request, data data.AnyMap) {
 		lastMessage = msg
 		data["lastMessage"] = lastMessage
 		if rcvr != nil {
-			if err = message.SendMessage(tgt, rqst, rcvr.Connection(), s.msgLgr); err != nil {
+			if err = message.SendMessage(tgt, rqst, rcvr.Writer(), s.msgLgr); err != nil {
 				errs = append(errs,
 					fmt.Sprintf("Send msg to server %s: %s", tgt, err))
 			}
