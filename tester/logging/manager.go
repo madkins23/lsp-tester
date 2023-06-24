@@ -125,7 +125,11 @@ func NewManager(flags flagSet) (*Manager, error) {
 	mgr.SetFileFormat(mgr.flags.LogFileFormat())
 
 	// Send all non-message traffic here.
-	log.Logger = mgr.stdLogger
+	if mgr.flags.LogFilePath() != "" {
+		log.Logger = mgr.fileLogger
+	} else {
+		log.Logger = mgr.stdLogger
+	}
 	return mgr, nil
 }
 
