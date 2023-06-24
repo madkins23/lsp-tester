@@ -13,17 +13,18 @@ import (
 
 	"github.com/madkins23/go-utils/log"
 
+	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
+	"github.com/madkins23/lsp-tester/tester/protocol/tcp"
+
 	"github.com/madkins23/lsp-tester/tester/data"
 	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/logging"
-	"github.com/madkins23/lsp-tester/tester/lsp"
 	"github.com/madkins23/lsp-tester/tester/message"
-	"github.com/madkins23/lsp-tester/tester/network"
 )
 
 type Server struct {
 	flags    *flags.Set
-	listener *network.Listener
+	listener *tcp.Listener
 	logMgr   *logging.Manager
 	msgLgr   *message.Logger
 	waiter   *sync.WaitGroup
@@ -31,7 +32,7 @@ type Server struct {
 }
 
 func NewWebServer(
-	flags *flags.Set, listener *network.Listener,
+	flags *flags.Set, listener *tcp.Listener,
 	logMgr *logging.Manager, msgLgr *message.Logger, waiter *sync.WaitGroup) *Server {
 	return &Server{
 		flags:    flags,

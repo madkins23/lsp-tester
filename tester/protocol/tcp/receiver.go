@@ -1,4 +1,4 @@
-package network
+package tcp
 
 import (
 	"bufio"
@@ -6,8 +6,9 @@ import (
 	"net"
 	"sync"
 
+	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
+
 	"github.com/madkins23/lsp-tester/tester/flags"
-	"github.com/madkins23/lsp-tester/tester/lsp"
 	"github.com/madkins23/lsp-tester/tester/message"
 )
 

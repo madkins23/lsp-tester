@@ -19,6 +19,7 @@ func Receivers() map[string]Receiver {
 
 type Receiver interface {
 	Handler
+	ConnectedTo() string
 	Receive(ready *chan bool)
 	SendContent(from, to string, content []byte, msgLogger *message.Logger) error
 	SendMessage(to string, message data.AnyMap, msgLogger *message.Logger) error

@@ -41,17 +41,17 @@ const (
 func (l *Logger) messageTo(from, to, msg string, content []byte, logger *zerolog.Logger, format string) {
 	var direction string
 	if strings.HasPrefix(from, "client") {
-		direction = from + rightArrow + to
+		direction = to + leftArrow + from
 	} else if from == "server" {
-		direction = to + leftArrow + from
-	} else if strings.HasPrefix(to, "client") {
-		direction = to + leftArrow + from
-	} else if to == "server" {
 		direction = from + rightArrow + to
+	} else if strings.HasPrefix(to, "client") {
+		direction = from + rightArrow + to
+	} else if to == "server" {
+		direction = to + leftArrow + from
 	}
 	if direction == "" {
 		log.Warn().Str("from", from).Str("to", to).Msg("Uncertain direction")
-		direction = from + leftArrow + to
+		direction = from + rightArrow + to
 	}
 
 	event := logger.Info().Str("!", direction).Int("#size", len(content))
@@ -108,9 +108,11 @@ func (l *Logger) keywordMessageFormat(data data.AnyMap, event *zerolog.Event, ms
 	if method, found := data.GetStringField("method"); found {
 		event.Str("%method", method)
 		msgType = "notification"
+		prefix := ">"
 		id, idFound := data.GetField("id")
 		if idFound {
 			msgType = "request"
+			prefix = "<"
 			event.Any("%ID", id)
 			methodByID[id] = method
 			expireByID[id] = time.Now().Add(idExpiration)
@@ -120,7 +122,7 @@ func (l *Logger) keywordMessageFormat(data data.AnyMap, event *zerolog.Event, ms
 			}
 		}
 		if params, found := data.GetField("params"); found {
-			l.addDataToEvent("<", params, event)
+			l.addDataToEvent(prefix, params, event)
 			if idFound {
 				paramsByID[id] = params
 			}

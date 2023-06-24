@@ -47,6 +47,10 @@ func NewReceiver(to string, flags *flags.Set, handler Handler, msgLgr *message.L
 	}
 }
 
+func (lsp *ReceiverBase) ConnectedTo() string {
+	return lsp.to
+}
+
 func (lsp *ReceiverBase) Start() error {
 	ready := make(chan bool)
 	go lsp.Receive(&ready)
@@ -104,7 +108,7 @@ func (lsp *ReceiverBase) Receive(ready *chan bool) {
 					from = "tester"
 					lsp.msgLgr.Message(lsp.to, "tester", "Rcvd", content)
 				}
-				if err := lsp.other.SendContent(from, lsp.to, content, lsp.msgLgr); err != nil {
+				if err := lsp.other.SendContent(from, lsp.other.ConnectedTo(), content, lsp.msgLgr); err != nil {
 					log.Error().Err(err).Msg("Sending outgoing message")
 				}
 			}

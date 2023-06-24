@@ -1,4 +1,5 @@
 {
+  "mode": "nexus",
   "webPort": "8008",
   "messages": "~/work/lisp/lsp-msgs",
   "logFormat": "keyword",

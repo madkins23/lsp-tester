@@ -13,12 +13,52 @@ import (
 
 	"github.com/madkins23/go-utils/path"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/madkins23/lsp-tester/tester/logging"
 )
 
+// Mode is the operation modeFlag.
+//
+//go:generate go run github.com/dmarkham/enumer -type=Mode -text
+type Mode uint
+
+const (
+	// Client mode pretends to be an LSP to a VSCode client.
+	// In this mode flags must provide connection data to VSCode.
+	// The required flag must specify the client connection (e.g. --clientPort).
+	Client Mode = iota
+
+	// Nexus mode uses LSP as server and pretends to be LSP to VSCode client.
+	// In this mode communication between the two is passed through and logged.
+	Nexus
+
+	// Server mode tests the LSP as a server, pretending to be a VSCode client.
+	// In this mode flags must provide connection data to the LSP.
+	// The required flag must specify the server connection (e.g. --serverPort).
+	Server
+)
+
+// Protocol is the LSP communications protocolFlag.
+//
+//go:generate go run github.com/dmarkham/enumer -type=Protocol -text
+type Protocol uint
+
+const (
+	// Sub protocol runs LSP as sub-process and communicate via it's stdin/stdout.
+	Sub Protocol = iota
+
+	// TCP protocol communicates with LSP via TCP ports.
+	TCP
+)
+
 type Set struct {
 	*flag.FlagSet
+	modeChecked   bool
+	modeFlag      string
+	mode          Mode
+	protocolFlag  string
+	protocol      Protocol
 	hostAddress   string
 	command       string
 	commandPath   string
@@ -43,13 +83,15 @@ func NewSet() *Set {
 	set := &Set{
 		FlagSet: flag.NewFlagSet("lsp-tester", flag.ContinueOnError),
 	}
+	set.StringVar(&set.modeFlag, "mode", "", "Operating modeFlag")
+	set.StringVar(&set.protocolFlag, "protocol", "", "LSP communication protocolFlag")
 	set.StringVar(&set.hostAddress, "host", "127.0.0.1", "Host address")
 	set.StringVar(&set.command, "command", "", "LSP server command")
 	set.UintVar(&set.clientPort, "clientPort", 0, "Port number served for extension to contact")
 	set.UintVar(&set.serverPort, "serverPort", 0, "Port number on which to contact LSP server")
 	set.UintVar(&set.webPort, "webPort", 0, "Web port number to enable web access")
 	set.StringVar(&set.messageDir, "messages", "", "Path to directory of message files")
-	set.StringVar(&set.requestPath, "request", "", "Path to requestPath file (client mode)")
+	set.StringVar(&set.requestPath, "request", "", "Path to requestPath file (client modeFlag)")
 	set.StringVar(&set.logLevelStr, "logLevel", "info", "Set log level")
 	set.StringVar(&set.logStdFormat, "logFormat", logging.FmtDefault, "Console output format")
 	set.StringVar(&set.logFilePath, "logFile", "", "Log file path")
@@ -75,6 +117,35 @@ func (s *Set) Parse(args []string) error {
 		return fmt.Errorf("parse flags: %w", err)
 	}
 
+	if err = s.checkMode(); err != nil {
+		return fmt.Errorf("check --mode: %w", err)
+	}
+
+	if err = s.checkProtocol(); err != nil {
+		return fmt.Errorf("check --protocol: %w", err)
+	}
+
+	if err = s.checkCommand(); err != nil {
+		return fmt.Errorf("check --command: %w", err)
+	}
+
+	if err = s.fixMessageDirectory(); err != nil {
+		return fmt.Errorf("fix message directory: %w", err)
+	}
+
+	if err = s.fixRequestPath(); err != nil {
+		return fmt.Errorf("fix request path: %w", err)
+	}
+
+	if err = s.checkLogging(); err != nil {
+		return fmt.Errorf("check logging: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Set) checkCommand() error {
+	var err error
 	if s.command != "" {
 		parts := regexp.MustCompile("\\s+").Split(s.command, -1)
 		if s.commandPath, err = exec.LookPath(parts[0]); err != nil {
@@ -97,24 +168,17 @@ func (s *Set) Parse(args []string) error {
 			}
 		}
 	}
+	return nil
+}
 
-	if err := s.fixMessageDirectory(); err != nil {
-		return fmt.Errorf("fix message directory: %w", err)
-	}
-
-	if err := s.fixRequestPath(); err != nil {
-		return fmt.Errorf("fix request path: %w", err)
-	}
-
+func (s *Set) checkLogging() error {
 	if err := s.fixLogFilePath(); err != nil {
 		return fmt.Errorf("fix log file path: %w", err)
 	}
-
 	var found bool
 	if s.logLevel, found = logLevels[s.logLevelStr]; !found {
 		return fmt.Errorf("log level '%s' does not exist", s.logLevelStr)
 	}
-
 	formatErrors := make([]error, 0, 2)
 	if !logging.IsFormat(s.logStdFormat) {
 		formatErrors = append(formatErrors, fmt.Errorf("unrecognized -logFormat=%s", s.logStdFormat))
@@ -125,8 +189,85 @@ func (s *Set) Parse(args []string) error {
 	if len(formatErrors) > 0 {
 		return errors.Join(formatErrors...)
 	}
-
 	return nil
+}
+
+func (s *Set) checkMode() error {
+	var err error
+	if s.modeFlag == "" {
+		// Try to guess mode from other flags.
+		if s.serverPort != 0 && s.clientPort != 0 {
+			s.mode = Nexus
+		} else if s.clientPort != 0 {
+			s.mode = Client
+		} else if s.serverPort != 0 {
+			s.mode = Server
+		} else {
+			return errors.New("can't guess -mode")
+		}
+	} else if s.mode, err = ModeString(s.modeFlag); err != nil {
+		return fmt.Errorf("parse -mode flag '%s': %w", s.modeFlag, err)
+	}
+	s.modeChecked = true
+	return nil
+}
+
+func (s *Set) checkProtocol() error {
+	if !s.modeChecked {
+		return fmt.Errorf("checkMode() must be called before checkProtocol()")
+	}
+	var err error
+	if s.protocolFlag == "" {
+		// Try to guess the protocol from other flags.
+		if s.command != "" {
+			s.protocol = Sub
+		} else if s.serverPort != 0 || s.clientPort != 0 {
+			s.protocol = TCP
+		} else {
+			return errors.New("can't guess -protocol")
+		}
+	} else if s.protocol, err = ProtocolString(s.protocolFlag); err != nil {
+		return fmt.Errorf("parse -protocol flag '%s': %w", s.protocolFlag, err)
+	}
+	switch s.protocol {
+	case Sub:
+		if s.ServerConnection() && !s.HasCommand() {
+			return fmt.Errorf("no -command for Sub/%s", s.Mode())
+		}
+		if s.ClientPort() != 0 {
+			log.Warn().Msg("-clientPort will be ignored in Sub protocol")
+		}
+		if s.ServerPort() != 0 {
+			log.Warn().Msg("-serverPort will be ignored in Sub protocol")
+		}
+	case TCP:
+		if s.ClientConnection() && s.ClientPort() == 0 {
+			return fmt.Errorf("no -clientPort for TCP/%s", s.Mode())
+		}
+		if s.ServerConnection() && s.ServerPort() == 0 {
+			return fmt.Errorf("no -serverPort for TCP/%s", s.Mode())
+		}
+		if s.HasCommand() {
+			log.Warn().Msg("-command will be ignored in TCP Protocol")
+		}
+	}
+	return nil
+}
+
+func (s *Set) ClientConnection() bool {
+	return s.mode == Client || s.mode == Nexus
+}
+
+func (s *Set) ServerConnection() bool {
+	return s.mode == Nexus || s.mode == Server
+}
+
+func (s *Set) Mode() Mode {
+	return s.mode
+}
+
+func (s *Set) Protocol() Protocol {
+	return s.protocol
 }
 
 func (s *Set) HasCommand() bool {

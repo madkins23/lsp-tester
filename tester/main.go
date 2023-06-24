@@ -1,32 +1,37 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"runtime/debug"
 	"sync"
 
-	"github.com/madkins23/go-utils/flag"
 	"github.com/rs/zerolog/log"
 
-	"github.com/madkins23/lsp-tester/tester/command"
+	"github.com/madkins23/go-utils/flag"
+	utilLog "github.com/madkins23/go-utils/log"
+
+	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
+	"github.com/madkins23/lsp-tester/tester/protocol/sub"
+
 	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/logging"
-	"github.com/madkins23/lsp-tester/tester/lsp"
 	"github.com/madkins23/lsp-tester/tester/message"
-	"github.com/madkins23/lsp-tester/tester/network"
+	"github.com/madkins23/lsp-tester/tester/protocol/tcp"
 	"github.com/madkins23/lsp-tester/tester/web"
 )
 
 func main() {
 	var (
-		err       error
-		flagSet   *flags.Set
-		listener  *network.Listener
-		logMgr    *logging.Manager
-		msgLogger *message.Logger
-		waiter    sync.WaitGroup
+		err     error
+		flagSet *flags.Set
+		logMgr  *logging.Manager
+		msgLgr  *message.Logger
+		waiter  sync.WaitGroup
 	)
+
+	utilLog.Console()
 
 	flagSet = flags.NewSet()
 	if err = flag.LoadSettings(flagSet.FlagSet); err != nil {
@@ -34,7 +39,7 @@ func main() {
 		return
 	}
 	if err = flagSet.Parse(os.Args[1:]); err != nil {
-		// Usage will have been done automagically.
+		log.Error().Err(err).Msg("Error parsing flags")
 		return
 	}
 	if logMgr, err = logging.NewManager(flagSet); err != nil {
@@ -48,72 +53,95 @@ func main() {
 		logVersion()
 	}
 
-	msgLogger = message.NewLogger(flagSet, logMgr)
+	msgLgr = message.NewLogger(flagSet, logMgr)
 
-	if flagSet.HasCommand() {
-		if flagSet.ClientPort() != 0 {
-			log.Warn().Msg("--process set, --clientPort will be ignored")
-		}
-		if flagSet.ServerPort() != 0 {
-			log.Warn().Msg("--process set, --serverPort will be ignored")
-		}
-
-		if process, err := command.NewProcess("server", flagSet, msgLogger, &waiter); err != nil {
-			log.Error().Err(err).Msg("Unable to create Process receiver")
-			return
-		} else if err = process.Start(); err != nil {
-			log.Error().Err(err).Msg("Unable to start Process receiver")
-			return
-		} else {
-			sendRequest(flagSet, process, msgLogger)
-		}
-	} else {
-		var client lsp.Receiver
-		var server lsp.Receiver
-
-		if flagSet.ServerPort() > 0 {
-			connection, err := network.ConnectToLSP(flagSet)
-			if err != nil {
-				log.Error().Err(err).Msgf("Connect to LSP at %s:%d", flagSet.HostAddress(), flagSet.ServerPort())
-				return
-			}
-
-			client = network.NewReceiver("server", flagSet, connection, msgLogger, &waiter)
-			if err = client.Start(); err != nil {
-				log.Error().Err(err).Msg("Unable to start ReceiverBase")
-				return
-			}
-
-			sendRequest(flagSet, client, msgLogger)
-		}
-
-		if flagSet.ClientPort() > 0 {
-			if listener, err = network.NewListener(flagSet, &waiter); err != nil {
-				log.Error().Err(err).Msgf("Make listener on %d", flagSet.ClientPort())
-			} else {
-				go listener.ListenForClient(func(conn net.Conn) {
-					log.Info().Msg("Accepting client")
-					server = network.NewReceiver("client", flagSet, conn, msgLogger, &waiter)
-					if err = server.Start(); err != nil {
-						log.Error().Err(err).Msg("Unable to start ReceiverBase")
-						return
-					}
-					if client != nil {
-						log.Info().Msg("Configuring pass-through operation")
-						client.SetOther(server)
-						server.SetOther(client)
-					}
-				})
-			}
-		}
+	switch flagSet.Protocol() {
+	case flags.Sub:
+		err = commandProtocol(flagSet, msgLgr, &waiter)
+	case flags.TCP:
+		err = tcpProtocol(flagSet, msgLgr, &waiter)
+	default:
+		log.Error().Str("protocol", flagSet.Protocol().String()).Msg("Unknown LSP communication protocol")
+		return
+	}
+	if err != nil {
+		log.Error().Err(err).Str("protocol", flagSet.Protocol().String()).Msg("LSP setup error")
+		return
 	}
 
-	webSrvr := web.NewWebServer(flagSet, listener, logMgr, msgLogger, &waiter)
+	var listener *tcp.Listener
+	webSrvr := web.NewWebServer(flagSet, listener, logMgr, msgLgr, &waiter)
 	if flagSet.WebPort() > 0 {
 		go webSrvr.Serve()
 	}
 
 	waiter.Wait()
+}
+
+func commandProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.WaitGroup) error {
+	var err error
+	var process lsp.Receiver
+	if flagSet.ServerConnection() {
+		process, err = sub.NewProcess("server", flagSet, msgLogger, waiter)
+		if err != nil {
+			return fmt.Errorf("create Process receiver: %w", err)
+		} else if err = process.Start(); err != nil {
+			return fmt.Errorf("start Process receiver: %w", err)
+		} else {
+			sendRequest(flagSet, process, msgLogger)
+		}
+	}
+
+	if flagSet.ClientConnection() {
+		caller := sub.NewCaller("client", flagSet, msgLogger, waiter)
+		if err := caller.Start(); err != nil {
+			return fmt.Errorf("start Caller receiver: %w", err)
+		}
+		caller.SetOther(process)
+		process.SetOther(caller)
+	}
+
+	return nil
+}
+
+func tcpProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.WaitGroup) error {
+	var client lsp.Receiver
+	if flagSet.ServerConnection() {
+		connection, err := tcp.ConnectToLSP(flagSet)
+		if err != nil {
+			return fmt.Errorf("connect to LSP %s:%d: %w", flagSet.HostAddress(), flagSet.ServerPort(), err)
+		}
+
+		client = tcp.NewReceiver("server", flagSet, connection, msgLogger, waiter)
+		if err = client.Start(); err != nil {
+			return fmt.Errorf("create server Receiver: %w", err)
+		}
+
+		sendRequest(flagSet, client, msgLogger)
+	}
+
+	if flagSet.ClientConnection() {
+		if listener, err := tcp.NewListener(flagSet, waiter); err != nil {
+			log.Error().Err(err).Msgf("Make listener on %d", flagSet.ClientPort())
+		} else {
+			var server lsp.Receiver
+			go listener.ListenForClient(func(conn net.Conn) {
+				log.Info().Msg("Accepting client")
+				server = tcp.NewReceiver("client", flagSet, conn, msgLogger, waiter)
+				if err = server.Start(); err != nil {
+					log.Error().Err(err).Msg("Unable to start ReceiverBase")
+					return
+				}
+				if client != nil {
+					log.Info().Msg("Configuring pass-through operation")
+					client.SetOther(server)
+					server.SetOther(client)
+				}
+			})
+		}
+	}
+
+	return nil
 }
 
 func logVersion() {

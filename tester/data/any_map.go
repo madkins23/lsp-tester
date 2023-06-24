@@ -1,6 +1,6 @@
 package data
 
-// TODO: Connect this to command line flag.
+// TODO: Connect this to command line flag?
 const maxDisplayLen = 32
 
 type AnyMap map[string]any

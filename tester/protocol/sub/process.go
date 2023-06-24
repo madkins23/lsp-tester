@@ -1,4 +1,4 @@
-package command
+package sub
 
 import (
 	"bufio"
@@ -10,8 +10,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
+
 	"github.com/madkins23/lsp-tester/tester/flags"
-	"github.com/madkins23/lsp-tester/tester/lsp"
 	"github.com/madkins23/lsp-tester/tester/message"
 )
 
@@ -39,7 +40,7 @@ func NewProcess(
 	}
 
 	return &ProcessReceiver{
-		ReceiverBase: lsp.NewReceiver(to, flags, NewHandler(procStdin, procStdout, cancel), msgLgr, waiter),
+		ReceiverBase: lsp.NewReceiver(to, flags, NewProcessHandler(procStdin, procStdout, cancel), msgLgr, waiter),
 		cmd:          cmd,
 	}, nil
 }
@@ -54,31 +55,31 @@ func (pr *ProcessReceiver) Start() error {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-var _ lsp.Handler = (*Handler)(nil)
+var _ lsp.Handler = (*ProcessHandler)(nil)
 
-type Handler struct {
+type ProcessHandler struct {
 	writer io.Writer
 	reader *bufio.Reader
 	cancel context.CancelFunc
 }
 
-func NewHandler(input io.Writer, output io.Reader, cancel context.CancelFunc) *Handler {
-	return &Handler{
+func NewProcessHandler(input io.Writer, output io.Reader, cancel context.CancelFunc) *ProcessHandler {
+	return &ProcessHandler{
 		writer: input,
 		reader: bufio.NewReader(output),
 		cancel: cancel,
 	}
 }
 
-func (h *Handler) Reader() *bufio.Reader {
+func (h *ProcessHandler) Reader() *bufio.Reader {
 	return h.reader
 }
 
-func (h *Handler) Writer() io.Writer {
+func (h *ProcessHandler) Writer() io.Writer {
 	return h.writer
 }
 
-func (h *Handler) Kill() error {
+func (h *ProcessHandler) Kill() error {
 	h.cancel()
 	return nil
 }
