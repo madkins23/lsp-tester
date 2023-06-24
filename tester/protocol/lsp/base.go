@@ -71,8 +71,8 @@ func (lsp *ReceiverBase) SetOther(other Receiver) {
 }
 
 func (lsp *ReceiverBase) Receive(ready *chan bool) {
-	log.Info().Str("to", lsp.to).Msg("ReceiverBase starting")
-	defer log.Info().Str("to", lsp.to).Msg("ReceiverBase finished")
+	log.Info().Str("to", lsp.to).Msg("Receive starting")
+	defer log.Info().Str("to", lsp.to).Msg("Receiver finished")
 
 	receivers[lsp.to] = lsp
 	defer delete(receivers, lsp.to)
@@ -82,7 +82,7 @@ func (lsp *ReceiverBase) Receive(ready *chan bool) {
 
 	content := make([]byte, 1048576) // 1 Mb
 
-	// Notify caller ReceiverBase is about to do its thing.
+	// Notify caller Receiver is about to do its thing.
 	*ready <- true
 
 	for {
