@@ -3,7 +3,7 @@ module github.com/madkins23/lsp-tester
 go 1.20
 
 require (
-	github.com/madkins23/go-utils v1.38.0
+	github.com/madkins23/go-utils v1.39.0
 	github.com/rs/zerolog v1.29.1
 )
 
