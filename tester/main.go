@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"sync"
 
+	"github.com/madkins23/go-utils/flag"
 	"github.com/rs/zerolog/log"
 
 	"github.com/madkins23/lsp-tester/tester/command"
@@ -28,7 +29,11 @@ func main() {
 	)
 
 	flagSet = flags.NewSet()
-	if err := flagSet.Parse(os.Args[1:]); err != nil {
+	if err = flag.LoadSettings(flagSet.FlagSet); err != nil {
+		log.Error().Err(err).Msg("Error loading settings file")
+		return
+	}
+	if err = flagSet.Parse(os.Args[1:]); err != nil {
 		// Usage will have been done automagically.
 		return
 	}
