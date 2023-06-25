@@ -52,6 +52,7 @@ type flagSet interface {
 	LogFileFormat() string
 	LogFilePath() string
 	LogFileAppend() bool
+	LogFileLevel() zerolog.Level
 }
 
 type Manager struct {
@@ -73,7 +74,6 @@ func NewManager(flags flagSet) (*Manager, error) {
 		fileFormatWriter: make(map[string]*zerolog.ConsoleWriter, 2),
 	}
 
-	zerolog.SetGlobalLevel(mgr.flags.LogLevel())
 	zerolog.TimestampFunc = func() time.Time {
 		return time.Now().Local()
 	}
@@ -162,6 +162,7 @@ func (m *Manager) SetStdFormat(format string) {
 		default:
 			log.Error().Msgf("Unknown log format: %s", format)
 		}
+		m.stdLogger = m.stdLogger.Level(m.flags.LogLevel())
 	}
 }
 
@@ -189,6 +190,7 @@ func (m *Manager) SetFileFormat(format string) {
 			default:
 				log.Error().Msgf("Unknown log format: %s", format)
 			}
+			m.fileLogger = m.fileLogger.Level(m.flags.LogFileLevel())
 		}
 	}
 }

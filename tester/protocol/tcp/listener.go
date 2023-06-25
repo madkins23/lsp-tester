@@ -29,12 +29,14 @@ func NewListener(flags *flags.Set, waiter *sync.WaitGroup) (*Listener, error) {
 	return listener, nil
 }
 
-func (l *Listener) ListenForClient(configureFn func(conn net.Conn)) {
+func (l *Listener) ListenForClient(ready chan bool, configureFn func(conn net.Conn)) {
 	log.Info().Uint("port", l.flags.ClientPort()).Msg("Listener starting")
 	defer log.Info().Uint("port", l.flags.ClientPort()).Msg("Listener finished")
 
 	l.waiter.Add(1)
 	defer l.waiter.Done()
+
+	ready <- true // Signal caller waiter has been added.
 
 	for {
 		if conn, err := l.listener.Accept(); err == nil {

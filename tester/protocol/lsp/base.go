@@ -88,8 +88,11 @@ func (lsp *ReceiverBase) Receive(ready *chan bool) {
 	for {
 		contentLen := lsp.receiveMsg()
 		if contentLen == 0 {
-			log.Error().Msg("header had no content length")
+			log.Warn().Str("msg", "header had no content length").Msg("Receiver")
 			continue
+		} else if contentLen < 0 {
+			log.Error().Str("msg", "end of file or broken connection").Msg("Receiver")
+			return
 		}
 
 		if length, err := io.ReadFull(lsp.Reader(), content[:contentLen]); err != nil {
@@ -169,7 +172,7 @@ func (lsp *ReceiverBase) receiveMsg() int {
 		lineBytes, isPrefix, err := lsp.Reader().ReadLine()
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
-				return 0
+				return -1
 			}
 			log.Error().Err(err).Msg("Read first line")
 			continue

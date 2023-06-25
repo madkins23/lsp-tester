@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -38,8 +39,12 @@ func main() {
 		log.Error().Err(err).Msg("Error loading settings file")
 		return
 	}
-	if err = flagSet.Parse(os.Args[1:]); err != nil {
-		log.Error().Err(err).Msg("Error parsing flags")
+	if err = flagSet.Parse(os.Args[1:]); err == nil {
+	} else if errors.Is(err, flags.ErrHelp) {
+		return
+	}
+	if err = flagSet.ValidateLogging(); err != nil {
+		log.Error().Err(err).Msg("Validate logging flags")
 		return
 	}
 	if logMgr, err = logging.NewManager(flagSet); err != nil {
@@ -52,14 +57,22 @@ func main() {
 	if flagSet.Version() {
 		logVersion()
 	}
+	if err = flagSet.Validate(); err != nil {
+		// Don't bother with error message if -version was used.
+		if !flagSet.Version() {
+			log.Error().Err(err).Msg("Validate flags")
+		}
+		return
+	}
 
 	msgLgr = message.NewLogger(flagSet, logMgr)
 
+	var listener *tcp.Listener
 	switch flagSet.Protocol() {
 	case flags.Sub:
 		err = commandProtocol(flagSet, msgLgr, &waiter)
 	case flags.TCP:
-		err = tcpProtocol(flagSet, msgLgr, &waiter)
+		listener, err = tcpProtocol(flagSet, msgLgr, &waiter)
 	default:
 		log.Error().Str("protocol", flagSet.Protocol().String()).Msg("Unknown LSP communication protocol")
 		return
@@ -69,7 +82,6 @@ func main() {
 		return
 	}
 
-	var listener *tcp.Listener
 	webSrvr := web.NewWebServer(flagSet, listener, logMgr, msgLgr, &waiter)
 	if flagSet.WebPort() > 0 {
 		go webSrvr.Serve()
@@ -81,7 +93,7 @@ func main() {
 func commandProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.WaitGroup) error {
 	var err error
 	var process lsp.Receiver
-	if flagSet.ServerConnection() {
+	if flagSet.ModeConnectsToServer() {
 		process, err = sub.NewProcess("server", flagSet, msgLogger, waiter)
 		if err != nil {
 			return fmt.Errorf("create Process receiver: %w", err)
@@ -92,40 +104,45 @@ func commandProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync
 		}
 	}
 
-	if flagSet.ClientConnection() {
+	if flagSet.ModeConnectsToClient() {
 		caller := sub.NewCaller("client", flagSet, msgLogger, waiter)
 		if err := caller.Start(); err != nil {
 			return fmt.Errorf("start Caller receiver: %w", err)
 		}
-		caller.SetOther(process)
-		process.SetOther(caller)
+		if process != nil {
+			caller.SetOther(process)
+			process.SetOther(caller)
+		}
 	}
 
 	return nil
 }
 
-func tcpProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.WaitGroup) error {
+func tcpProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.WaitGroup) (*tcp.Listener, error) {
 	var client lsp.Receiver
-	if flagSet.ServerConnection() {
+	if flagSet.ModeConnectsToServer() {
 		connection, err := tcp.ConnectToLSP(flagSet)
 		if err != nil {
-			return fmt.Errorf("connect to LSP %s:%d: %w", flagSet.HostAddress(), flagSet.ServerPort(), err)
+			return nil, fmt.Errorf("connect to LSP %s:%d: %w", flagSet.HostAddress(), flagSet.ServerPort(), err)
 		}
 
 		client = tcp.NewReceiver("server", flagSet, connection, msgLogger, waiter)
 		if err = client.Start(); err != nil {
-			return fmt.Errorf("create server Receiver: %w", err)
+			return nil, fmt.Errorf("create server Receiver: %w", err)
 		}
 
 		sendRequest(flagSet, client, msgLogger)
 	}
 
-	if flagSet.ClientConnection() {
-		if listener, err := tcp.NewListener(flagSet, waiter); err != nil {
+	var err error
+	var listener *tcp.Listener
+	if flagSet.ModeConnectsToClient() {
+		if listener, err = tcp.NewListener(flagSet, waiter); err != nil {
 			log.Error().Err(err).Msgf("Make listener on %d", flagSet.ClientPort())
 		} else {
 			var server lsp.Receiver
-			go listener.ListenForClient(func(conn net.Conn) {
+			ready := make(chan bool)
+			go listener.ListenForClient(ready, func(conn net.Conn) {
 				log.Info().Msg("Accepting client")
 				server = tcp.NewReceiver("client", flagSet, conn, msgLogger, waiter)
 				if err = server.Start(); err != nil {
@@ -138,10 +155,11 @@ func tcpProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.Wai
 					server.SetOther(client)
 				}
 			})
+			<-ready // Wait for listener to add to waiter.
 		}
 	}
 
-	return nil
+	return listener, nil
 }
 
 func logVersion() {

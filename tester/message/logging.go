@@ -34,20 +34,28 @@ func (l *Logger) Message(from, to, msg string, content []byte) {
 }
 
 const (
-	leftArrow  = "<--"
-	rightArrow = "-->"
+	leftArrow   = "<--"
+	rightArrow  = "-->"
+	dualPrefix  = "<>"
+	leftPrefix  = "<"
+	rightPrefix = ">"
 )
 
 func (l *Logger) messageTo(from, to, msg string, content []byte, logger *zerolog.Logger, format string) {
 	var direction string
+	var prefix = ""
 	if strings.HasPrefix(from, "client") {
 		direction = to + leftArrow + from
+		prefix = leftPrefix
 	} else if from == "server" {
 		direction = from + rightArrow + to
+		prefix = rightPrefix
 	} else if strings.HasPrefix(to, "client") {
 		direction = from + rightArrow + to
+		prefix = rightPrefix
 	} else if to == "server" {
 		direction = to + leftArrow + from
+		prefix = leftPrefix
 	}
 	if direction == "" {
 		log.Warn().Str("from", from).Str("to", to).Msg("Uncertain direction")
@@ -63,7 +71,7 @@ func (l *Logger) messageTo(from, to, msg string, content []byte, logger *zerolog
 			// Fall through to end where raw JSON is added.
 		} else {
 			event = logger.Info().Str("!", direction).Int("#size", len(content))
-			if err := l.keywordMessageFormat(anyData, event, msg); err != nil {
+			if err := l.keywordMessageFormat(anyData, event, prefix, msg); err != nil {
 				log.Warn().Err(err).Msg("keywordMessageFormat()")
 			}
 			return
@@ -103,16 +111,14 @@ func expirationGC() {
 	}
 }
 
-func (l *Logger) keywordMessageFormat(data data.AnyMap, event *zerolog.Event, msg string) error {
+func (l *Logger) keywordMessageFormat(data data.AnyMap, event *zerolog.Event, prefix, msg string) error {
 	var msgType string
 	if method, found := data.GetStringField("method"); found {
 		event.Str("%method", method)
 		msgType = "notification"
-		prefix := ">"
 		id, idFound := data.GetField("id")
 		if idFound {
 			msgType = "request"
-			prefix = "<"
 			event.Any("%ID", id)
 			methodByID[id] = method
 			expireByID[id] = time.Now().Add(idExpiration)
@@ -129,18 +135,18 @@ func (l *Logger) keywordMessageFormat(data data.AnyMap, event *zerolog.Event, ms
 		}
 	} else if result, found := data.GetField("result"); found {
 		msgType = "response"
-		l.addDataToEvent(">", result, event)
+		l.addDataToEvent(prefix, result, event)
 		id, idFound := data.GetField("id")
 		if idFound {
 			event.Any("%ID", id)
 			if method, found := methodByID[id]; found {
 				if method == "$/alive/listPackages" {
-					l.addDataToEvent(">", result, event)
+					l.addDataToEvent(prefix, result, event)
 				}
 				event.Str("<>method", method)
 			}
 			if params, found := paramsByID[id]; found {
-				l.addDataToEvent("<>", params, event)
+				l.addDataToEvent(dualPrefix, params, event)
 			}
 		}
 		if errAny, found := data.GetField("error"); found && errAny != nil {
@@ -235,8 +241,12 @@ func (l *Logger) addToEvent(label string, item any, event *zerolog.Event) (bool,
 	var err error
 	if text, ok := item.(string); ok {
 		if !strings.HasSuffix(label, "path") {
-			if len(text) > l.flags.MaxFieldDisplayLength() {
-				text = text[:l.flags.MaxFieldDisplayLength()]
+			if strings.HasPrefix(text, "; ") {
+				text = text[2:]
+			}
+			maxLen := l.flags.MaxFieldDisplayLength()
+			if !strings.HasSuffix(label, "message") && len(text) > maxLen {
+				text = text[:maxLen]
 			}
 		}
 		if text == "" {

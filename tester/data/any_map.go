@@ -1,8 +1,5 @@
 package data
 
-// TODO: Connect this to command line flag?
-const maxDisplayLen = 32
-
 type AnyMap map[string]any
 
 func (am AnyMap) HasField(name string) bool {

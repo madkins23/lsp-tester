@@ -1,7 +1,0 @@
-{
-  "mode": "nexus",
-  "webPort": "8008",
-  "messages": "~/work/lisp/lsp-msgs",
-  "logFormat": "keyword",
-  "logFile": "/tmp/lsp-tester.log"
-}
