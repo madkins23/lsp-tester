@@ -3,12 +3,12 @@ module github.com/madkins23/lsp-tester
 go 1.20
 
 require (
+	github.com/dmarkham/enumer v1.5.8
 	github.com/madkins23/go-utils v1.39.1
 	github.com/rs/zerolog v1.29.1
 )
 
 require (
-	github.com/dmarkham/enumer v1.5.8 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/pascaldekloe/name v1.0.0 // indirect
