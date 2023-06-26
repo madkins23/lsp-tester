@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -64,6 +65,7 @@ type Manager struct {
 	fileFormat       string
 	stdFormatWriter  map[string]*zerolog.ConsoleWriter
 	fileFormatWriter map[string]*zerolog.ConsoleWriter
+	logStandard      *os.File
 	logFile          *os.File
 }
 
@@ -111,11 +113,26 @@ func NewManager(flags flagSet) (*Manager, error) {
 			}
 		}
 	}
+
+	mgr.logStandard = os.Stderr
+	if flags.LogLevel() == zerolog.Disabled {
+		// Standard logging had been disabled, attempt to create backup file for errors.
+		if tempDir := os.TempDir(); tempDir == "" {
+		} else if stat, err := os.Stat(tempDir); err != nil {
+		} else if stat.IsDir() {
+			errPath := filepath.Join(tempDir, "lsp-tester.err")
+			errFile, err := os.OpenFile(errPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+			if err == nil && errFile != nil {
+				mgr.logStandard = errFile
+			}
+		}
+	}
+
 	mgr.stdFormatWriter[FmtDefault] = &zerolog.ConsoleWriter{
-		Out: os.Stderr, TimeFormat: "15:04:05",
+		Out: mgr.logStandard, TimeFormat: "15:04:05",
 	}
 	mgr.stdFormatWriter[FmtExpand] = &zerolog.ConsoleWriter{
-		Out: os.Stderr, TimeFormat: "15:04:05",
+		Out: mgr.logStandard, TimeFormat: "15:04:05",
 		FieldsExclude: []string{"msg"},
 		FormatExtra:   formatMsgJSON,
 	}
@@ -158,11 +175,16 @@ func (m *Manager) SetStdFormat(format string) {
 		case FmtExpand:
 			m.stdLogger = m.plainLogger.Output(*m.stdFormatWriter[FmtExpand])
 		case FmtJSON:
-			m.stdLogger = m.plainLogger.Output(os.Stderr)
+			m.stdLogger = m.plainLogger.Output(m.logStandard)
 		default:
 			log.Error().Msgf("Unknown log format: %s", format)
 		}
-		m.stdLogger = m.stdLogger.Level(m.flags.LogLevel())
+		logLevel := m.flags.LogLevel()
+		if logLevel == zerolog.Disabled && m.logStandard != os.Stderr {
+			// We have a viable alternate error log.
+			logLevel = zerolog.ErrorLevel
+		}
+		m.stdLogger = m.stdLogger.Level(logLevel)
 	}
 }
 
