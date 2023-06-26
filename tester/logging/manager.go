@@ -182,7 +182,7 @@ func (m *Manager) SetStdFormat(format string) {
 		logLevel := m.flags.LogLevel()
 		if logLevel == zerolog.Disabled && m.logStandard != os.Stderr {
 			// We have a viable alternate error log.
-			logLevel = zerolog.ErrorLevel
+			logLevel = zerolog.WarnLevel
 		}
 		m.stdLogger = m.stdLogger.Level(logLevel)
 	}

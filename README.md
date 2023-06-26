@@ -188,8 +188,13 @@ Use `-logLevel=none` to turn this output off completely,
 or choose an appropriate log format to reduce the amount of text.
 Use the `-logFormat=<format>` flag to change the log format for the console.
 
+When setting `-logLevel=none` an attempt is made to create a backup error log.
+The log file `lsp-tester.err` will be created in the platform's "temporary" directory.
+For Linux this will be `/tmp/lsp-tester.err`.
+Other platforms may not have a temporary directory, in which case this file will not be created.
+The log level of the created file is 'warn'.
+
 The flag `-logLevel=none` may be useful when configuring Nexus mode for the Command protocol.
-Note that errors will not show up in the log file in this case.
 
 #### File Output
 
