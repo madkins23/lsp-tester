@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/madkins23/go-utils/app"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/madkins23/lsp-tester/tester/data"
@@ -25,25 +27,32 @@ var _ Receiver = (*ReceiverBase)(nil)
 
 type ReceiverBase struct {
 	Handler
-	flags  *flags.Set
-	to     string
-	other  Receiver
-	msgLgr *message.Logger
-	waiter *sync.WaitGroup
+	flags      *flags.Set
+	to         string
+	other      Receiver
+	logger     *zerolog.Logger
+	msgLogger  *message.Logger
+	terminator *app.Terminator
+	waiter     *sync.WaitGroup
 }
 
 var sequence atomic.Uint32
 
-func NewReceiver(to string, flags *flags.Set, handler Handler, msgLgr *message.Logger, waiter *sync.WaitGroup) *ReceiverBase {
+func NewReceiver(to string, flags *flags.Set, handler Handler,
+	msgLgr *message.Logger, waiter *sync.WaitGroup, terminator *app.Terminator) *ReceiverBase {
+	//
 	if to == "client" {
 		to += "-" + strconv.Itoa(int(sequence.Add(1)))
 	}
+	logger := log.With().Str("for", to).Logger()
 	return &ReceiverBase{
-		Handler: handler,
-		flags:   flags,
-		to:      to,
-		msgLgr:  msgLgr,
-		waiter:  waiter,
+		Handler:    handler,
+		flags:      flags,
+		to:         to,
+		logger:     &logger,
+		msgLogger:  msgLgr,
+		terminator: terminator,
+		waiter:     waiter,
 	}
 }
 
@@ -57,10 +66,10 @@ func (lsp *ReceiverBase) Start() error {
 	for i := 0; i < 5; i++ {
 		select {
 		case <-ready:
-			log.Debug().Str("to", lsp.to).Msg("Connected")
+			lsp.logger.Debug().Msg("Connected")
 			return nil
 		case <-time.After(time.Second):
-			log.Debug().Str("to", lsp.to).Msg("Connecting...")
+			lsp.logger.Debug().Msg("Connecting...")
 		}
 	}
 	return fmt.Errorf("connection to %s not made", lsp.to)
@@ -71,8 +80,8 @@ func (lsp *ReceiverBase) SetOther(other Receiver) {
 }
 
 func (lsp *ReceiverBase) Receive(ready *chan bool) {
-	log.Info().Str("to", lsp.to).Msg("Receive starting")
-	defer log.Info().Str("to", lsp.to).Msg("Receiver finished")
+	lsp.logger.Info().Msg("Receiver starting")
+	defer lsp.logger.Info().Msg("Receiver finished")
 
 	receivers[lsp.to] = lsp
 	defer delete(receivers, lsp.to)
@@ -88,31 +97,35 @@ func (lsp *ReceiverBase) Receive(ready *chan bool) {
 	for {
 		contentLen := lsp.receiveMsg()
 		if contentLen == 0 {
-			log.Warn().Str("msg", "header had no content length").Msg("Receiver")
+			lsp.logger.Warn().Msg("Header had no content length")
 			continue
 		} else if contentLen < 0 {
-			log.Error().Str("msg", "end of file or broken connection").Msg("Receiver")
+			lsp.logger.Error().Msg("End of file or broken connection")
+			if err := lsp.terminator.Shutdown(); err != nil {
+				lsp.logger.Error().Err(err).Msg("Terminating")
+			}
 			return
 		}
 
 		if length, err := io.ReadFull(lsp.Reader(), content[:contentLen]); err != nil {
-			log.Error().Err(err).Msg("Read response")
+			lsp.logger.Error().Err(err).Msg("Read response")
 		} else if length != contentLen {
-			log.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
+			lsp.logger.Error().Msgf("Read %d bytes instead of %d", length, contentLen)
 		} else {
 			content = content[:contentLen]
+			lsp.logger.Debug().Any("other", lsp.other).Msg("Have content")
 			if lsp.other == nil {
-				lsp.msgLgr.Message(lsp.to, "tester", "Rcvd", content)
+				lsp.msgLogger.Message(lsp.to, "tester", "Rcvd", content)
 			} else {
 				// TODO: What if there are multiple clients?
 				// How do we know which one server should send to?
 				from := lsp.to
 				if lsp.flags.LogMessageTwice() {
 					from = "tester"
-					lsp.msgLgr.Message(lsp.to, "tester", "Rcvd", content)
+					lsp.msgLogger.Message(lsp.to, "tester", "Rcvd", content)
 				}
-				if err := lsp.other.SendContent(from, lsp.other.ConnectedTo(), content, lsp.msgLgr); err != nil {
-					log.Error().Err(err).Msg("Sending outgoing message")
+				if err := lsp.other.SendContent(from, lsp.other.ConnectedTo(), content, lsp.msgLogger); err != nil {
+					lsp.logger.Error().Err(err).Msg("Sending outgoing message")
 				}
 			}
 		}
@@ -174,10 +187,10 @@ func (lsp *ReceiverBase) receiveMsg() int {
 			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
 				return -1
 			}
-			log.Error().Err(err).Msg("Read first line")
+			lsp.logger.Error().Err(err).Msg("Read first line")
 			continue
 		} else if isPrefix {
-			log.Error().Err(err).Msg("Only beginning of header line read")
+			lsp.logger.Error().Err(err).Msg("Only beginning of header line read")
 			continue
 		}
 		if len(lineBytes) == 0 {
@@ -190,7 +203,7 @@ func (lsp *ReceiverBase) receiveMsg() int {
 		}
 		contentLen, err = strconv.Atoi(matches[1])
 		if err != nil {
-			log.Error().Err(err).Msgf("Content length '%s' not integer", matches[0])
+			lsp.logger.Error().Err(err).Msgf("Content length '%s' not integer", matches[0])
 			continue
 		}
 	}

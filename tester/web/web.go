@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -11,35 +10,42 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/madkins23/go-utils/log"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
-	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
-	"github.com/madkins23/lsp-tester/tester/protocol/tcp"
+	"github.com/madkins23/go-utils/app"
 
 	"github.com/madkins23/lsp-tester/tester/data"
 	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/logging"
 	"github.com/madkins23/lsp-tester/tester/message"
+	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
+	"github.com/madkins23/lsp-tester/tester/protocol/tcp"
 )
 
 type Server struct {
-	flags    *flags.Set
-	listener *tcp.Listener
-	logMgr   *logging.Manager
-	msgLgr   *message.Logger
-	waiter   *sync.WaitGroup
-	messages *message.Files
+	flags      *flags.Set
+	listener   *tcp.Listener
+	logger     *zerolog.Logger
+	logMgr     *logging.Manager
+	msgLgr     *message.Logger
+	messages   *message.Files
+	terminator *app.Terminator
+	waiter     *sync.WaitGroup
 }
 
-func NewWebServer(
-	flags *flags.Set, listener *tcp.Listener,
-	logMgr *logging.Manager, msgLgr *message.Logger, waiter *sync.WaitGroup) *Server {
+func NewWebServer(flags *flags.Set, listener *tcp.Listener, logMgr *logging.Manager,
+	msgLgr *message.Logger, waiter *sync.WaitGroup, terminator *app.Terminator) *Server {
+	//
+	logger := log.With().Str("svc", "web").Logger()
 	return &Server{
-		flags:    flags,
-		listener: listener,
-		logMgr:   logMgr,
-		msgLgr:   msgLgr,
-		waiter:   waiter,
+		flags:      flags,
+		listener:   listener,
+		logger:     &logger,
+		logMgr:     logMgr,
+		msgLgr:     msgLgr,
+		terminator: terminator,
+		waiter:     waiter,
 	}
 }
 
@@ -51,12 +57,12 @@ func (s *Server) Serve() {
 	s.waiter.Add(1)
 	defer s.waiter.Done()
 
-	log.Info().Str("URL", "http://localhost:"+strconv.Itoa(int(port))).Msg("Web service")
+	s.logger.Info().Str("URL", "http://localhost:"+strconv.Itoa(int(port))).Msg("Web service")
 
 	if messageDir := s.flags.MessageDir(); messageDir != "" {
 		s.messages = message.NewFiles(s.flags)
 		if err := s.messages.LoadMessageFiles(); err != nil {
-			log.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
+			s.logger.Warn().Err(err).Str("dir", messageDir).Msg("Unable to read message directory")
 		}
 	}
 
@@ -69,44 +75,42 @@ func (s *Server) Serve() {
 	const configureImageError = "Configuring image handler"
 
 	if err := s.handlePage("main", "/", anyData, s.preMain, nil); err != nil {
-		log.Error().Err(err).Str("page", "main").Msg(configurePageError)
+		s.logger.Error().Err(err).Str("page", "main").Msg(configurePageError)
 	}
 
 	for _, name := range []string{"home.png", "bomb.png"} {
 		if err := s.handleImage(name); err != nil {
-			log.Error().Err(err).Str("image", name).Msg(configureImageError)
+			s.logger.Error().Err(err).Str("image", name).Msg(configureImageError)
 		}
 	}
 
-	server := http.Server{
+	server := &http.Server{
 		Addr: ":" + strconv.Itoa(int(port)),
 	}
 
-	exitChannel := make(chan bool)
+	// Use channel and goroutine to:
+	// * delay shutdown until exit page is shown and
+	// * prevent web service shutdown from hanging and keeping app alive.
+	exitChan := make(chan bool)
+	s.terminator.Add(NewTerminator(s, server))
 	go func() {
-		<-exitChannel
-		if s.listener != nil {
-			s.listener.Close()
-		}
-		for _, rcvr := range lsp.Receivers() {
-			if err := rcvr.Kill(); err != nil {
-				log.Error().Err(err).Msg("Error killing receiver")
-			}
-		}
-		if err := server.Shutdown(context.Background()); err != nil {
-			log.Error().Err(err).Msg("Error shutting down web server")
+		<-exitChan
+		if err := s.terminator.Shutdown(); err != nil {
+			s.logger.Error().Err(err).Msg("Terminating")
 		}
 	}()
+
 	if err := s.handlePage("exit", "/exit", nil, func(_ *http.Request, anyData data.AnyMap) {
 		anyData["exit"] = true
 	}, func(_ *http.Request, _ data.AnyMap) {
-		exitChannel <- true
+		s.logger.Info().Msg("Exit")
+		exitChan <- true
 	}); err != nil {
-		log.Error().Err(err).Str("page", "exit").Msg(configurePageError)
+		s.logger.Error().Err(err).Str("page", "exit").Msg(configurePageError)
 	}
 
 	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-		log.Error().Err(err).Msg("Web service failure")
+		s.logger.Error().Err(err).Msg("Web service failure")
 	}
 }
 
@@ -124,7 +128,7 @@ func (s *Server) handleImage(name string) error {
 			name := r.URL.Path[7:]
 			w.Header().Set("Content-Type", "image/png")
 			if _, err := w.Write(buf); err != nil {
-				log.Error().Err(err).Str("image", name).Msg("Write image to HTTP response")
+				s.logger.Error().Err(err).Str("image", name).Msg("Write image to HTTP response")
 			}
 		})
 		return nil
@@ -165,7 +169,7 @@ func (s *Server) handlePage(name, url string, startData data.AnyMap, pre, post f
 				pre(r, anyData)
 			}
 			if err := tmpl.ExecuteTemplate(w, "skeleton", anyData); err != nil {
-				log.Error().Err(err).Str("page", name).Msg("Error serving page")
+				s.logger.Error().Err(err).Str("page", name).Msg("Error serving page")
 				http.Error(w,
 					http.StatusText(http.StatusInternalServerError),
 					http.StatusInternalServerError)
@@ -207,7 +211,7 @@ func (s *Server) preLogFormatPost(rqst *http.Request, anyMap data.AnyMap) {
 		}
 		anyMap["result"] = []string{"Log file format now " + s.logMgr.FileFormat()}
 	default:
-		log.Error().Str("formatName", formatName).Msg("Unknown format name")
+		s.logger.Error().Str("formatName", formatName).Msg("Unknown format name")
 	}
 }
 
@@ -234,7 +238,7 @@ func (s *Server) preSendMessagePost(rqst *http.Request, data data.AnyMap) {
 		if rcvr != nil {
 			if err = rcvr.SendMessage(tgt, rqst, s.msgLgr); err != nil {
 				errs = append(errs,
-					fmt.Sprintf("Send msg to server %s: %s", tgt, err))
+					fmt.Sprintf("Send msg to web %s: %s", tgt, err))
 			}
 		}
 	}

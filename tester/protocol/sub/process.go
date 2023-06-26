@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"github.com/madkins23/go-utils/app"
 	"github.com/rs/zerolog/log"
 
 	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
@@ -23,9 +24,9 @@ type ProcessReceiver struct {
 	cmd *exec.Cmd
 }
 
-func NewProcess(
-	to string, flags *flags.Set, msgLgr *message.Logger, waiter *sync.WaitGroup) (lsp.Receiver, error) {
-
+func NewProcess(to string, flags *flags.Set,
+	msgLgr *message.Logger, waiter *sync.WaitGroup, terminator *app.Terminator) (lsp.Receiver, error) {
+	//
 	ctx, cancel := context.WithCancel(context.Background())
 	path, args := flags.Command()
 	log.Debug().Str("path", path).Strs("args", args).Msg("execute command")
@@ -40,8 +41,9 @@ func NewProcess(
 	}
 
 	return &ProcessReceiver{
-		ReceiverBase: lsp.NewReceiver(to, flags, NewProcessHandler(procStdin, procStdout, cancel), msgLgr, waiter),
-		cmd:          cmd,
+		ReceiverBase: lsp.NewReceiver(
+			to, flags, NewProcessHandler(procStdin, procStdout, cancel), msgLgr, waiter, terminator),
+		cmd: cmd,
 	}, nil
 }
 

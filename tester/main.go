@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"sync"
 
+	"github.com/madkins23/go-utils/app"
 	"github.com/rs/zerolog/log"
 
 	"github.com/madkins23/go-utils/flag"
@@ -25,11 +26,12 @@ import (
 
 func main() {
 	var (
-		err     error
-		flagSet *flags.Set
-		logMgr  *logging.Manager
-		msgLgr  *message.Logger
-		waiter  sync.WaitGroup
+		err        error
+		flagSet    *flags.Set
+		logManager *logging.Manager
+		msgLogger  *message.Logger
+		terminator *app.Terminator
+		waiter     sync.WaitGroup
 	)
 
 	utilLog.Console()
@@ -47,13 +49,13 @@ func main() {
 		log.Error().Err(err).Msg("Validate logging flags")
 		return
 	}
-	if logMgr, err = logging.NewManager(flagSet); err != nil {
+	if logManager, err = logging.NewManager(flagSet); err != nil {
 		log.Error().Err(err).Msg("Failed to configure log options")
 	}
-	defer logMgr.Close()
+	defer logManager.Close()
 
-	log.Info().Msg("LSP starting")
-	defer log.Info().Msg("LSP finished")
+	log.Info().Msg("LSP Tester starting")
+	defer log.Info().Msg("LSP Tester finished")
 	if flagSet.Version() {
 		logVersion()
 	}
@@ -65,14 +67,16 @@ func main() {
 		return
 	}
 
-	msgLgr = message.NewLogger(flagSet, logMgr)
+	msgLogger = message.NewLogger(flagSet, logManager)
+	terminator = app.NewTerminator()
+	terminator.Add(lsp.NewTerminator())
 
 	var listener *tcp.Listener
 	switch flagSet.Protocol() {
 	case flags.Sub:
-		err = commandProtocol(flagSet, msgLgr, &waiter)
+		err = commandProtocol(flagSet, msgLogger, &waiter, terminator)
 	case flags.TCP:
-		listener, err = tcpProtocol(flagSet, msgLgr, &waiter)
+		listener, err = tcpProtocol(flagSet, msgLogger, &waiter, terminator)
 	default:
 		log.Error().Str("protocol", flagSet.Protocol().String()).Msg("Unknown LSP communication protocol")
 		return
@@ -82,7 +86,7 @@ func main() {
 		return
 	}
 
-	webSrvr := web.NewWebServer(flagSet, listener, logMgr, msgLgr, &waiter)
+	webSrvr := web.NewWebServer(flagSet, listener, logManager, msgLogger, &waiter, terminator)
 	if flagSet.WebPort() > 0 {
 		go webSrvr.Serve()
 	}
@@ -90,11 +94,13 @@ func main() {
 	waiter.Wait()
 }
 
-func commandProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.WaitGroup) error {
+func commandProtocol(flagSet *flags.Set,
+	msgLogger *message.Logger, waiter *sync.WaitGroup, terminator *app.Terminator) error {
+	//
 	var err error
 	var process lsp.Receiver
 	if flagSet.ModeConnectsToServer() {
-		process, err = sub.NewProcess("server", flagSet, msgLogger, waiter)
+		process, err = sub.NewProcess("server", flagSet, msgLogger, waiter, terminator)
 		if err != nil {
 			return fmt.Errorf("create Process receiver: %w", err)
 		} else if err = process.Start(); err != nil {
@@ -105,20 +111,23 @@ func commandProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync
 	}
 
 	if flagSet.ModeConnectsToClient() {
-		caller := sub.NewCaller("client", flagSet, msgLogger, waiter)
-		if err := caller.Start(); err != nil {
-			return fmt.Errorf("start Caller receiver: %w", err)
-		}
+		caller := sub.NewCaller("client", flagSet, msgLogger, waiter, terminator)
+		// Connect Receivers to each other before starting the Caller.
 		if process != nil {
 			caller.SetOther(process)
 			process.SetOther(caller)
+		}
+		if err := caller.Start(); err != nil {
+			return fmt.Errorf("start Caller receiver: %w", err)
 		}
 	}
 
 	return nil
 }
 
-func tcpProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.WaitGroup) (*tcp.Listener, error) {
+func tcpProtocol(flagSet *flags.Set,
+	msgLogger *message.Logger, waiter *sync.WaitGroup, terminator *app.Terminator) (*tcp.Listener, error) {
+	//
 	var client lsp.Receiver
 	if flagSet.ModeConnectsToServer() {
 		connection, err := tcp.ConnectToLSP(flagSet)
@@ -126,7 +135,7 @@ func tcpProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.Wai
 			return nil, fmt.Errorf("connect to LSP %s:%d: %w", flagSet.HostAddress(), flagSet.ServerPort(), err)
 		}
 
-		client = tcp.NewReceiver("server", flagSet, connection, msgLogger, waiter)
+		client = tcp.NewReceiver("server", flagSet, connection, msgLogger, waiter, terminator)
 		if err = client.Start(); err != nil {
 			return nil, fmt.Errorf("create server Receiver: %w", err)
 		}
@@ -144,15 +153,15 @@ func tcpProtocol(flagSet *flags.Set, msgLogger *message.Logger, waiter *sync.Wai
 			ready := make(chan bool)
 			go listener.ListenForClient(ready, func(conn net.Conn) {
 				log.Info().Msg("Accepting client")
-				server = tcp.NewReceiver("client", flagSet, conn, msgLogger, waiter)
+				server = tcp.NewReceiver("client", flagSet, conn, msgLogger, waiter, terminator)
+				// Connect Receivers to each other before starting the client Receiver.
+				if client != nil {
+					client.SetOther(server)
+					server.SetOther(client)
+				}
 				if err = server.Start(); err != nil {
 					log.Error().Err(err).Msg("Unable to start ReceiverBase")
 					return
-				}
-				if client != nil {
-					log.Info().Msg("Configuring pass-through operation")
-					client.SetOther(server)
-					server.SetOther(client)
 				}
 			})
 			<-ready // Wait for listener to add to waiter.

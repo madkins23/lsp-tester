@@ -6,14 +6,18 @@ import (
 	"net"
 	"sync"
 
+	"github.com/madkins23/go-utils/app"
+
 	"github.com/madkins23/lsp-tester/tester/protocol/lsp"
 
 	"github.com/madkins23/lsp-tester/tester/flags"
 	"github.com/madkins23/lsp-tester/tester/message"
 )
 
-func NewReceiver(to string, flags *flags.Set, connection net.Conn, msgLgr *message.Logger, waiter *sync.WaitGroup) lsp.Receiver {
-	return lsp.NewReceiver(to, flags, NewHandler(connection), msgLgr, waiter)
+func NewReceiver(to string, flags *flags.Set, connection net.Conn,
+	msgLgr *message.Logger, waiter *sync.WaitGroup, terminator *app.Terminator) lsp.Receiver {
+	//
+	return lsp.NewReceiver(to, flags, NewHandler(connection), msgLgr, waiter, terminator)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
