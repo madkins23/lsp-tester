@@ -70,6 +70,12 @@ func main() {
 	msgLogger = message.NewLogger(flagSet, logManager)
 	terminator = app.NewTerminator()
 	terminator.Add(lsp.NewTerminator())
+	app.HandleTerminalSignals(func(sig os.Signal) {
+		log.Warn().Str("signal", sig.String()).Msg("Terminal OS signal received")
+		if err := terminator.Shutdown(); err != nil {
+			log.Error().Err(err).Msg("Terminating")
+		}
+	})
 
 	var listener *tcp.Listener
 	switch flagSet.Protocol() {
