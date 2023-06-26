@@ -2,10 +2,10 @@
 Tool to do basic testing of the communication between a VSCode language extension and
 a Language Server Protocol (LSP) server providing support to that extension.
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/madkins23/lsp-tester)](https://goreportcard.com/report/github.com/madkins23/lsp-tester)
-![GitHub](https://img.shields.io/github/license/madkins23/lsp-tester)
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/madkins23/lsp-tester)
 [![Go Reference](https://pkg.go.dev/badge/github.com/madkins23/lsp-tester.svg)](https://pkg.go.dev/github.com/madkins23/lsp-tester)
+![GitHub](https://img.shields.io/github/license/madkins23/lsp-tester)
+[![Go Report Card](https://goreportcard.com/badge/github.com/madkins23/lsp-tester)](https://goreportcard.com/report/github.com/madkins23/lsp-tester)
 
 ## Notes
 
