@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/dmarkham/enumer v1.5.8
-	github.com/madkins23/go-utils v1.40.0
+	github.com/madkins23/go-utils v1.40.1
 	github.com/rs/zerolog v1.29.1
 )
 
