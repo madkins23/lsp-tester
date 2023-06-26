@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _ProtocolName = "CommandTCP"
+const _ProtocolName = "SubTCP"
 
-var _ProtocolIndex = [...]uint8{0, 7, 10}
+var _ProtocolIndex = [...]uint8{0, 3, 6}
 
-const _ProtocolLowerName = "commandtcp"
+const _ProtocolLowerName = "subtcp"
 
 func (i Protocol) String() string {
 	if i >= Protocol(len(_ProtocolIndex)-1) {
@@ -31,15 +31,15 @@ func _ProtocolNoOp() {
 var _ProtocolValues = []Protocol{Sub, TCP}
 
 var _ProtocolNameToValueMap = map[string]Protocol{
-	_ProtocolName[0:7]:       Sub,
-	_ProtocolLowerName[0:7]:  Sub,
-	_ProtocolName[7:10]:      TCP,
-	_ProtocolLowerName[7:10]: TCP,
+	_ProtocolName[0:3]:      Sub,
+	_ProtocolLowerName[0:3]: Sub,
+	_ProtocolName[3:6]:      TCP,
+	_ProtocolLowerName[3:6]: TCP,
 }
 
 var _ProtocolNames = []string{
-	_ProtocolName[0:7],
-	_ProtocolName[7:10],
+	_ProtocolName[0:3],
+	_ProtocolName[3:6],
 }
 
 // ProtocolString retrieves an enum value from the enum constants string name.
